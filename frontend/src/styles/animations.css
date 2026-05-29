@@ -1,0 +1,203 @@
+/* ============================================================
+   Voice Calendar — Micro-Animations Library
+   录音脉冲 | 波形 | 状态过渡 | 卡片动效 | 骨架屏
+   ============================================================ */
+
+/* ── 录音按钮脉冲呼吸 ──────────────────────────────── */
+@keyframes vc-pulse-recording {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--vc-recording-glow),
+                0 0 0 0 var(--vc-recording-glow);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 12px transparent,
+                0 0 20px 4px var(--vc-recording-glow);
+    transform: scale(1.04);
+  }
+}
+
+@keyframes vc-pulse-processing {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--vc-processing-glow);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+    transform: scale(1.02);
+  }
+}
+
+.vc-anim-pulse-recording {
+  animation: vc-pulse-recording 1.5s ease-in-out infinite;
+}
+
+.vc-anim-pulse-processing {
+  animation: vc-pulse-processing 2s ease-in-out infinite;
+}
+
+/* ── 波形跳跃条 ────────────────────────────────────── */
+@keyframes vc-waveform-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50%      { transform: scaleY(1); }
+}
+
+.vc-waveform-bar {
+  display: inline-block;
+  width: 3px;
+  height: 24px;
+  margin: 0 2px;
+  border-radius: var(--vc-radius-full);
+  background: var(--vc-primary);
+  transform-origin: center bottom;
+  animation: vc-waveform-bar 0.8s ease-in-out infinite;
+}
+
+.vc-waveform-bar:nth-child(1) { animation-delay: 0s; }
+.vc-waveform-bar:nth-child(2) { animation-delay: 0.1s; }
+.vc-waveform-bar:nth-child(3) { animation-delay: 0.2s; }
+.vc-waveform-bar:nth-child(4) { animation-delay: 0.3s; }
+.vc-waveform-bar:nth-child(5) { animation-delay: 0.4s; }
+.vc-waveform-bar:nth-child(6) { animation-delay: 0.3s; }
+.vc-waveform-bar:nth-child(7) { animation-delay: 0.2s; }
+
+/* ── 淡入/滑入动效 ────────────────────────────────── */
+@keyframes vc-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes vc-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes vc-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes vc-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vc-anim-fade-in     { animation: vc-fade-in 0.3s var(--vc-transition-base); }
+.vc-anim-slide-up    { animation: vc-slide-up 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.vc-anim-slide-down  { animation: vc-slide-down 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+.vc-anim-scale-in    { animation: vc-scale-in 0.3s var(--vc-transition-spring); }
+
+/* ── 卡片入场（对话气泡）──────────────────────────── */
+@keyframes vc-bubble-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-16px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes vc-bubble-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.vc-anim-bubble-left  { animation: vc-bubble-in-left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.vc-anim-bubble-right { animation: vc-bubble-in-right 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* ── 骨架屏闪光 ────────────────────────────────────── */
+@keyframes vc-skeleton-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.vc-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--vc-bg-elevated) 25%,
+    hsla(225, 20%, 22%, 0.6) 50%,
+    var(--vc-bg-elevated) 75%
+  );
+  background-size: 200% 100%;
+  animation: vc-skeleton-shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--vc-radius-sm);
+}
+
+/* ── 旋转加载 ──────────────────────────────────────── */
+@keyframes vc-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.vc-anim-spin {
+  animation: vc-spin 1s linear infinite;
+}
+
+/* ── 状态闪烁指示 ──────────────────────────────────── */
+@keyframes vc-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+
+.vc-anim-blink {
+  animation: vc-blink 1.4s ease-in-out infinite;
+}
+
+/* ── Vue Transition 类 ────────────────────────────── */
+.vc-fade-enter-active,
+.vc-fade-leave-active {
+  transition: opacity var(--vc-transition-base);
+}
+.vc-fade-enter-from,
+.vc-fade-leave-to {
+  opacity: 0;
+}
+
+.vc-slide-up-enter-active,
+.vc-slide-up-leave-active {
+  transition: all var(--vc-transition-base);
+}
+.vc-slide-up-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+.vc-slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.vc-scale-enter-active,
+.vc-scale-leave-active {
+  transition: all var(--vc-transition-base);
+}
+.vc-scale-enter-from,
+.vc-scale-leave-to {
+  opacity: 0;
+  transform: scale(0.92);
+}

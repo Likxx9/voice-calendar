@@ -1,0 +1,90 @@
+/* ============================================================
+   Voice Calendar — Accessibility Styles
+   无障碍专用 | 全屏触控 | 高对比 | 焦点增强
+   ============================================================ */
+
+/* ── Eyes-Free 盲听模式 ────────────────────────────── */
+[data-mode="eyes-free"] {
+  /* 极大触控区域 */
+  --vc-touch-target-min: 56px;
+
+  /* 高对比度增强 */
+  --vc-text-primary: hsl(0, 0%, 100%);
+  --vc-text-secondary: hsl(0, 0%, 85%);
+  --vc-bg-base: hsl(0, 0%, 2%);
+  --vc-bg-surface: hsl(0, 0%, 6%);
+}
+
+[data-mode="eyes-free"] button,
+[data-mode="eyes-free"] [role="button"] {
+  min-width: var(--vc-touch-target-min);
+  min-height: var(--vc-touch-target-min);
+  font-size: var(--vc-text-xl);
+}
+
+/* ── 高对比模式 ────────────────────────────────────── */
+@media (prefers-contrast: high) {
+  :root {
+    --vc-border: hsla(220, 15%, 60%, 0.5);
+    --vc-text-primary: hsl(0, 0%, 100%);
+    --vc-text-secondary: hsl(0, 0%, 80%);
+  }
+}
+
+/* ── 减少动画偏好 ──────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── 焦点可视增强 ──────────────────────────────────── */
+:focus-visible {
+  outline: 3px solid var(--vc-primary-light);
+  outline-offset: 3px;
+  border-radius: var(--vc-radius-sm);
+}
+
+/* ── 跳转导航链接 ──────────────────────────────────── */
+.vc-skip-link {
+  position: absolute;
+  top: -9999px;
+  left: var(--vc-space-md);
+  z-index: var(--vc-z-toast);
+  padding: var(--vc-space-sm) var(--vc-space-lg);
+  background: var(--vc-primary);
+  color: var(--vc-text-inverse);
+  border-radius: var(--vc-radius-sm);
+  font-weight: var(--vc-weight-semibold);
+  text-decoration: none;
+  transition: top var(--vc-transition-fast);
+}
+
+.vc-skip-link:focus {
+  top: var(--vc-space-md);
+}
+
+/* ── ARIA live 区域 ────────────────────────────────── */
+.vc-live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── 全屏触控覆盖区域（Eyes-Free 专用）─────────────── */
+.vc-fullscreen-touch-zone {
+  position: fixed;
+  inset: 0;
+  z-index: var(--vc-z-overlay);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
