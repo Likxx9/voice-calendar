@@ -19,7 +19,7 @@
     <!-- 核心时间线 -->
     <main v-else class="calendar-body">
       <TimelineView 
-        :events="calendarStore.activeEvents"
+        :events="calendarStore.events"
         @event-click="onEventClick"
       />
     </main>

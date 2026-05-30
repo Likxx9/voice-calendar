@@ -1,9 +1,8 @@
 """
 STT Service
-语音转文本服务 - 云端/离线双轨 ASR 引擎
+语音转文本服务 - 云端 ASR 引擎
 
-云端（首选）：科大讯飞极速 ASR API / 阿里达摩院 SenseVoice-Large
-离线（降级）：阿里达摩院 FunASR / Paraformer-Large（搭配 Sherpa-onnx）
+云端：科大讯飞极速 ASR API / 阿里达摩院 SenseVoice-Large
 """
 import asyncio
 from typing import AsyncGenerator, Optional
@@ -23,11 +22,8 @@ class STTService:
         self.channels = 1  # 单声道
         self.sample_width = 2  # 16bit
         
-        # TODO: 初始化云端/离线 ASR 引擎
-        # 云端：科大讯飞极速 ASR API 或 SenseVoice-Large
-        # 离线：FunASR Paraformer-Large + Sherpa-onnx
-        # from funasr import AutoModel
-        # self.asr_model = AutoModel(model="paraformer-zh")
+        # TODO: 初始化云端 ASR 引擎
+        # 科大讯飞极速 ASR API 或 SenseVoice-Large
     
     async def transcribe_stream(
         self,
@@ -54,13 +50,8 @@ class STTService:
                 audio_data = np.frombuffer(bytes(buffer), dtype=np.int16)
                 audio_float = audio_data.astype(np.float32) / 32768.0
                 
-                # TODO: 调用云端/离线 ASR 引擎进行识别
-                # 云端：调用讯飞/SenseVoice API
-                # 离线：调用 FunASR Paraformer 本地模型
-                # result = self.asr_model.generate(
-                #     input=audio_float,
-                #     language=self.language
-                # )
+                # TODO: 调用云端 ASR 引擎进行识别
+                # 调用讯飞/SenseVoice API
                 
                 # 模拟识别结果
                 partial_text = "识别中..."
@@ -81,7 +72,7 @@ class STTService:
             audio_data = np.frombuffer(bytes(buffer), dtype=np.int16)
             audio_float = audio_data.astype(np.float32) / 32768.0
             
-            # TODO: 调用云端/离线 ASR 引擎进行最终识别
+            # TODO: 调用云端 ASR 引擎进行最终识别
             final_text = "最终识别结果"
             confidence = 0.95
             

@@ -35,7 +35,6 @@ class TodoTask(Base):
     is_completed = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
-    # 离线同步版本控制（设计文档 §2.12）
     version_tag = Column(String(100), default=lambda: str(uuid.uuid4()), nullable=False)
     
     # 时间戳

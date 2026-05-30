@@ -75,11 +75,11 @@ class Settings(BaseSettings):
     TOOL_RETRY_CALENDAR: int = 3
     TOOL_RETRY_REMINDER: int = 5
 
-    # STT配置 - 云端: 讯飞/SenseVoice；离线: FunASR/Paraformer + Sherpa-onnx
+    # STT配置 - 云端: 讯飞/SenseVoice
     STT_MODEL: str = "sensevoice-large"
     STT_LANGUAGE: str = "zh"
 
-    # TTS配置 - 云端: 火山引擎/讯飞；离线: ChatTTS/Sherpa-onnx VITS
+    # TTS配置 - 云端: 火山引擎/讯飞
     TTS_MODEL: str = "volcano-tts"
     TTS_VOICE: str = "zh_female_shuangkuaisisi_moon_bigtts"
 
