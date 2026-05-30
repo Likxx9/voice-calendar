@@ -1,0 +1,41 @@
+:root {
+  /* ── 背景 ── */
+  --bg:       #07090F;   /* 主背景，极深海军蓝 */
+  --bg2:      #0C1020;   /* 卡片背景 */
+  --bg3:      #111827;   /* 次级背景 */
+  --bg-hover: #121A2E;   /* 悬停态背景 */
+
+  /* ── 主色调：金色 ── */
+  --gold:        #C8A45A;
+  --gold2:       #E2C07A;               /* 高亮金 */
+  --gold-dim:    rgba(200,164,90,.10);  /* 金色填充背景 */
+  --gold-border: rgba(200,164,90,.18);  /* 金色描边 */
+
+  /* ── 事件分类色 ── */
+  --blue:      #4B96FF;
+  --blue-dim:  rgba(75,150,255,.10);
+  --teal:      #2DD4BF;
+  --teal-dim:  rgba(45,212,191,.10);
+  --red:       #F87171;
+  --red-dim:   rgba(248,113,113,.10);
+  --amber:     #FBBF24;
+  --amber-dim: rgba(251,191,36,.10);
+  --green:     #4ADE80;
+  --green-dim: rgba(74,222,128,.10);
+
+  /* ── 文字 ── */
+  --text:  #EBE5DC;   /* 主文字，暖白 */
+  --text2: #8A8FA8;   /* 次级文字 */
+  --text3: #3A3F52;   /* 弱化文字，分隔符 */
+
+  /* ── 边框 ── */
+  --border: rgba(255,255,255,.055);
+
+  /* ── 字体族 ── */
+  --fd: 'Cormorant Garamond', Georgia, serif;   /* 展示字体 */
+  --fu: 'Outfit', system-ui, sans-serif;         /* UI 字体 */
+  --fm: 'JetBrains Mono', 'Courier New', monospace; /* 等宽字体 */
+
+  /* ── 圆角 ── */
+  --r: 9px;
+}
