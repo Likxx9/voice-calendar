@@ -84,7 +84,7 @@ function formatTime(iso: string): string {
 .conflict-card {
   padding: var(--vc-space-lg);
   background: var(--vc-bg-elevated);
-  border: 1px solid hsla(0, 78%, 56%, 0.3);
+  border: 1px solid var(--vc-border);
   border-left: 4px solid var(--vc-danger);
   border-radius: var(--vc-radius-md);
 }
@@ -175,9 +175,8 @@ function formatTime(iso: string): string {
 }
 
 .conflict-card__suggestion-btn:hover {
-  border-color: var(--vc-primary);
-  background: hsla(224, 76%, 48%, 0.08);
-  transform: translateX(4px);
+  border-color: var(--vc-accent);
+  background: hsla(var(--vc-accent-h), var(--vc-accent-s), var(--vc-accent-l), 0.08);
 }
 
 .conflict-card__actions {

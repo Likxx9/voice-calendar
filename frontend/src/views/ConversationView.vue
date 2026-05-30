@@ -40,35 +40,61 @@
         />
       </div>
 
-      <!-- 多方忙闲协同推荐 -->
-      <div v-if="showFreeBusy" class="inline-card-container freebusy-container">
-        <FreeBusyTimeline 
-          :attendees="mockFreeBusySlots" 
-          :freeWindows="mockFreeWindows"
-          @select-window="handleSelectFreeBusyWindow"
-        />
-        <MeetingSuggestion 
-          :suggestions="mockFreeWindows"
-          @select-suggestion="handleSelectFreeBusyWindow"
+
+
+      <!-- 实时联网搜索卡片 (M9 Web Search Agent) -->
+      <div v-if="sessionStore.voiceState === 'searching'" class="inline-card-container">
+        <SearchAgentCard
+          :query="currentSearchQuery"
+          :status="currentSearchStatus"
+          :events="currentSearchEvents"
+          @add-event="handleSearchAddEvent"
+          @retry="handleSearchRetry"
         />
       </div>
     </section>
 
     <!-- 底部状态、频谱与操作区 -->
     <footer class="conversation-footer vc-glass">
-      <!-- 实时逐字听写转写 -->
-      <div class="footer-transcript">
-        <StreamingTranscript
-          :isActive="sessionStore.isRecording || sessionStore.isProcessing"
-          :partialText="sessionStore.partialTranscript"
-          :finalText="sessionStore.finalTranscript"
-        />
+      <!-- 键盘文本输入模式与语音转写流模式的形态切换 -->
+      <div class="footer-input-morph">
+        <transition name="morph-fade" mode="out-in">
+          <!-- 键盘键入形态：仅在闲置/未录音/未处理时展示 -->
+          <div v-if="sessionStore.voiceState === 'idle'" class="morph-input-bar">
+            <span class="morph-input-icon">⌨️</span>
+            <input 
+              type="text" 
+              class="keyboard-text-input" 
+              placeholder="输入您的日程指令... (例如：明早九点开会)" 
+              v-model="keyboardInputText"
+              @keyup.enter="handleKeyboardSubmit"
+            />
+            <button 
+              class="morph-input-submit"
+              :disabled="!keyboardInputText.trim()"
+              @click="handleKeyboardSubmit"
+              aria-label="提交日程"
+            >
+              ➔
+            </button>
+          </div>
+
+          <!-- 语音输入形态：录音、解析或检索状态下展示 -->
+          <div v-else class="morph-transcript-bar">
+            <StreamingTranscript
+              :isActive="sessionStore.isRecording || sessionStore.isProcessing || sessionStore.voiceState === 'searching'"
+              :partialText="sessionStore.partialTranscript"
+              :finalText="sessionStore.finalTranscript"
+            />
+          </div>
+        </transition>
       </div>
 
-      <!-- 实时音频波形图 (录音中显示频谱柱) -->
-      <div class="footer-visualizer">
+      <!-- 实时音频波形图 (录音中显示频谱柱，支持实时音量微动) -->
+      <div class="footer-visualizer" :class="{ 'footer-visualizer--visible': sessionStore.isRecording }">
         <WaveformVisualizer
           :isActive="sessionStore.isRecording"
+          :volume="mockVolume"
           :width="300"
           :height="60"
         />
@@ -86,7 +112,7 @@
         </button>
       </div>
 
-      <!-- 麦克风控制区 -->
+      <!-- 麦克风控制与播报控制区 -->
       <div class="footer-control-row">
         <!-- 播报控制条 (TTS) -->
         <TTSControlBar
@@ -97,14 +123,20 @@
           @stop="stopTTS"
         />
 
-        <div class="main-mic-button">
-          <VoiceButton
-            :status="sessionStore.voiceState"
-            :volume="mockVolume"
-            @press-start="startVoiceInput"
-            @press-end="stopVoiceInput"
-            @tap="handleTapButton"
-          />
+        <div class="main-mic-button-row">
+          <div class="main-mic-button">
+            <VoiceButton
+              :status="sessionStore.voiceState"
+              :volume="mockVolume"
+              @press-start="startVoiceInput"
+              @press-end="stopVoiceInput"
+              @tap="handleTapButton"
+            />
+          </div>
+          <!-- 键盘/语音快捷形态说明标签 -->
+          <span class="morph-mic-tip" v-if="sessionStore.voiceState === 'idle'">
+            或按住/轻触麦克风进行语音添加
+          </span>
         </div>
       </div>
     </footer>
@@ -128,11 +160,10 @@ import WaveformVisualizer from '@/modules/sensory/WaveformVisualizer.vue'
 import VoiceButton from '@/modules/sensory/VoiceButton.vue'
 import ClarificationCard from '@/modules/stateMachine/ClarificationCard.vue'
 import ConflictNegotiation from '@/modules/stateMachine/ConflictNegotiation.vue'
-import FreeBusyTimeline from '@/modules/coordination/FreeBusyTimeline.vue'
-import MeetingSuggestion from '@/modules/coordination/MeetingSuggestion.vue'
 import TTSControlBar from '@/modules/sensory/TTSControlBar.vue'
+import SearchAgentCard from '@/modules/stateMachine/SearchAgentCard.vue'
 
-import type { ConflictItem, FreeBusySlot } from '@/types/contracts'
+import type { ConflictItem, WebSearchEvent } from '@/types/contracts'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
@@ -142,41 +173,20 @@ const { speakText, stop: stopTTS } = useTTSPlayer()
 
 const flowScrollContainer = ref<HTMLElement | null>(null)
 const mockVolume = ref(0)
-const showFreeBusy = ref(false)
+
+// M9 Web Search Agent 状态
+const currentSearchQuery = ref('')
+const currentSearchStatus = ref<'searching' | 'parsing' | 'results'>('searching')
+const currentSearchEvents = ref<WebSearchEvent[]>([])
 
 const quickSuggestions = [
   '帮我创建明天下午三点的会',
-  '明天下午两点开会',
-  '添加买牛奶的待办',
-  '查询大家明天的忙闲'
+  '联网检索2026年杭州的动漫展',
+  '搜一下上海最近的实践活动',
+  '添加买牛奶的待办'
 ]
 
-// 模拟忙闲与建议数据
-const mockFreeBusySlots = ref<FreeBusySlot[]>([
-  {
-    email: 'alex@corp.com',
-    busy_periods: [
-      { start: `${new Date().toISOString().split('T')[0]}T10:00:00`, end: `${new Date().toISOString().split('T')[0]}T12:00:00` },
-      { start: `${new Date().toISOString().split('T')[0]}T15:00:00`, end: `${new Date().toISOString().split('T')[0]}T16:30:00` }
-    ]
-  },
-  {
-    email: 'bob@corp.com',
-    busy_periods: [
-      { start: `${new Date().toISOString().split('T')[0]}T09:00:00`, end: `${new Date().toISOString().split('T')[0]}T10:30:00` },
-      { start: `${new Date().toISOString().split('T')[0]}T14:00:00`, end: `${new Date().toISOString().split('T')[0]}T15:30:00` }
-    ]
-  }
-])
 
-const mockFreeWindows = computed(() => {
-  const todayStr = new Date().toISOString().split('T')[0]
-  return [
-    { start: `${todayStr}T13:00:00`, end: `${todayStr}T14:00:00`, score: 0.95 },
-    { start: `${todayStr}T16:30:00`, end: `${todayStr}T17:30:00`, score: 0.88 },
-    { start: `${todayStr}T08:00:00`, end: `${todayStr}T09:00:00`, score: 0.65 }
-  ]
-})
 
 const mockConflicts = computed<ConflictItem[]>(() => {
   const todayStr = new Date().toISOString().split('T')[0]
@@ -202,12 +212,29 @@ function scrollToBottom() {
   })
 }
 
+// 键盘文本录入及提交
+const keyboardInputText = ref('')
+
+function handleKeyboardSubmit() {
+  if (!keyboardInputText.value.trim()) return
+  const text = keyboardInputText.value.trim()
+  keyboardInputText.value = ''
+  
+  stopTTS()
+  sessionStore.setVoiceState('processing')
+  sessionStore.setFinalTranscript(text)
+  
+  setTimeout(() => {
+    processUserInput(text)
+  }, 800)
+}
+
 // 模拟音量变化
 let volumeInterval: ReturnType<typeof setInterval> | null = null
 function simulateVolume() {
   volumeInterval = setInterval(() => {
-    mockVolume.value = Math.random() * 0.8
-  }, 120)
+    mockVolume.value = 0.1 + Math.random() * 0.7
+  }, 100)
 }
 function stopVolumeSimulation() {
   if (volumeInterval) {
@@ -217,24 +244,71 @@ function stopVolumeSimulation() {
   mockVolume.value = 0
 }
 
+// 实时转写流式上屏仿真 (Streaming Transcript Simulation)
+let streamingInterval: ReturnType<typeof setInterval> | null = null
+
+function startStreamingSimulation() {
+  sessionStore.setFinalTranscript('')
+  sessionStore.updatePartialTranscript('')
+  
+  const mockSpeechTemplates = [
+    '帮我创建明天下午三点和PM开会',
+    '添加买牛奶的待办日程',
+    '联网检索2026年杭州的动漫展',
+    '搜一下上海最近的实践活动',
+    '查询大家明天的忙闲日程'
+  ]
+  const targetSentence = mockSpeechTemplates[Math.floor(Math.random() * mockSpeechTemplates.length)]
+  const chars = targetSentence.split('')
+  let currentIdx = 0
+  
+  if (streamingInterval) {
+    clearInterval(streamingInterval)
+  }
+  
+  streamingInterval = setInterval(() => {
+    if (currentIdx < chars.length) {
+      const partial = chars.slice(0, currentIdx + 1).join('')
+      sessionStore.updatePartialTranscript(partial)
+      currentIdx++
+    } else {
+      if (streamingInterval) {
+        clearInterval(streamingInterval)
+        streamingInterval = null
+      }
+    }
+  }, 180)
+}
+
+function stopStreamingSimulation() {
+  if (streamingInterval) {
+    clearInterval(streamingInterval)
+    streamingInterval = null
+  }
+}
+
 // 语音交互状态流控制
 function startVoiceInput() {
   stopTTS()
   vibrate('recording')
   sessionStore.setVoiceState('recording')
   sessionStore.setConnectionState('connected')
-  sessionStore.updatePartialTranscript('正在倾听您的指令...')
   simulateVolume()
+  startStreamingSimulation()
 }
 
 function stopVoiceInput() {
   stopVolumeSimulation()
+  stopStreamingSimulation()
   vibrate('processing')
   sessionStore.setVoiceState('processing')
-  sessionStore.setFinalTranscript('明天下午三点和PM开会')
+  
+  const finalSpeechText = sessionStore.partialTranscript || '明天下午三点和PM开会'
+  sessionStore.setFinalTranscript(finalSpeechText)
+  sessionStore.updatePartialTranscript('')
   
   setTimeout(() => {
-    processUserInput('明天下午三点和PM开会')
+    processUserInput(finalSpeechText)
   }, 1200)
 }
 
@@ -245,8 +319,10 @@ function handleTapButton() {
   } else if (sessionStore.voiceState === 'idle') {
     startVoiceInput()
     setTimeout(() => {
-      stopVoiceInput()
-    }, 3000)
+      if (sessionStore.voiceState === 'recording') {
+        stopVoiceInput()
+      }
+    }, 2800)
   }
 }
 
@@ -270,16 +346,121 @@ function processUserInput(text: string) {
   scrollToBottom()
 
   // 2. 规则路由与意图匹配模拟
-  if (text.includes('大家') || text.includes('忙闲') || text.includes('空闲')) {
-    // 触发多人忙闲协同视图
-    showFreeBusy.value = true
-    sessionStore.setVoiceState('tts_playing')
-    sessionStore.addMessage({
-      role: 'system',
-      content: '我已获取到了 Alex 和 Bob 明天的忙闲信息。最佳共同空闲推荐为下午 1:00 至 2:00，匹配度高达 95%。您是否需要创建此时间的会议？',
-      type: 'clarification'
-    })
-    speakText('我已获取到了所有参与者明天的忙闲信息。最推荐的时间段是下午一点。')
+  if (text.includes('搜') || text.includes('查') || text.includes('实践') || text.includes('活动') || text.includes('展') || text.includes('检索')) {
+    // M9 联网检索意图嗅探与路由
+    sessionStore.setVoiceState('searching')
+    currentSearchQuery.value = text
+    currentSearchStatus.value = 'searching'
+    currentSearchEvents.value = []
+    speakText('正在连接互联网搜索引擎为您检索实践活动...')
+
+    // 模拟搜索流程延时
+    setTimeout(() => {
+      currentSearchStatus.value = 'parsing'
+      speakText('已抓取到相关网页，大模型正在提炼日程实体...')
+      
+      setTimeout(() => {
+        currentSearchStatus.value = 'results'
+        
+        // 构造针对城市的精品 mock 实践活动数据
+        if (text.includes('杭州')) {
+          currentSearchEvents.value = [
+            {
+              title: '2026年杭州国际动漫节 (CICAF)',
+              start_time: '2026-06-01T09:00:00+08:00',
+              end_time: '2026-06-05T18:00:00+08:00',
+              location: '杭州白马湖动漫广场',
+              description: '第二十二届中国国际动漫节，汇聚全国顶尖动漫游戏展商与数万名动漫同好，设有国漫高峰论坛、声优大赛与Cosplay盛典。',
+              source_url: 'https://www.cicaf.com'
+            },
+            {
+              title: '2026年杭州西湖荷花艺术节',
+              start_time: '2026-07-10T08:00:00+08:00',
+              end_time: '2026-07-20T17:00:00+08:00',
+              location: '杭州西湖曲院风荷',
+              description: '年度西湖江南文化艺术盛宴，包含千亩荷花水上观赏会、江南丝竹音乐会、古风非遗文创市集等丰富实践活动。',
+              source_url: 'https://www.hzwestlake.gov.cn'
+            }
+          ]
+        } else if (text.includes('北京')) {
+          currentSearchEvents.value = [
+            {
+              title: '2026年北京国际汽车展览会 (Auto China)',
+              start_time: '2026-06-15T09:00:00+08:00',
+              end_time: '2026-06-20T17:30:00+08:00',
+              location: '北京中国国际展览中心 (顺义馆)',
+              description: '全球顶级车展，聚焦新能源智慧出行、自动驾驶技术与新一代概念车展示，设有科技先锋实践互动体验区。',
+              source_url: 'https://www.autochina.com.cn'
+            },
+            {
+              title: '2026年北京古风非遗手工文化沙龙',
+              start_time: '2026-06-06T14:00:00+08:00',
+              end_time: '2026-06-06T18:00:00+08:00',
+              location: '北京南锣鼓巷文化艺术馆',
+              description: '沉浸式非物质文化遗产手工实践，特邀非遗大师现场指导京剧脸谱绘制、剪纸及景泰蓝掐丝工艺制作。',
+              source_url: 'https://www.bjheritage.org.cn'
+            }
+          ]
+        } else if (text.includes('上海')) {
+          currentSearchEvents.value = [
+            {
+              title: '2026年上海草莓音乐节',
+              start_time: '2026-06-12T13:00:00+08:00',
+              end_time: '2026-06-14T21:30:00+08:00',
+              location: '上海世博公园',
+              description: '大型户外音乐盛宴，设有草莓舞台、爱舞台、新血计划舞台，结合时尚创意市集、美食街区及环保实践营地。',
+              source_url: 'https://www.modernsky.com'
+            },
+            {
+              title: '2026年上海世博会智慧科技成果展',
+              start_time: '2026-06-25T09:30:00+08:00',
+              end_time: '2026-06-28T17:00:00+08:00',
+              location: '上海世博展览馆 1号馆',
+              description: '展示前沿人工智能、脑机接口、人形机器人与低空航行器，设有青少年科技创新实践互动专区。',
+              source_url: 'https://www.shexpocenter.com'
+            }
+          ]
+        } else {
+          currentSearchEvents.value = [
+            {
+              title: '2026年人工智能开发者大会 (AI DevCon)',
+              start_time: '2026-06-08T09:00:00+08:00',
+              end_time: '2026-06-10T18:00:00+08:00',
+              location: '国家会议中心',
+              description: '汇聚前沿AI科学家与广大开发者的顶级技术大会，涵盖大模型微调、智能体编排及多模态交互实践工坊。',
+              source_url: 'https://www.aidevcon.org'
+            },
+            {
+              title: '2026年社区青年志愿者环保实践活动',
+              start_time: '2026-06-05T08:30:00+08:00',
+              end_time: '2026-06-05T12:00:00+08:00',
+              location: '城市生态森林公园西门',
+              description: '关爱生态，绿色出行。青年志愿环保实践活动，进行垃圾分类宣讲、湿地环境保护及爱心植树维护。',
+              source_url: 'https://www.greenvolunteers.cn'
+            }
+          ]
+        }
+        
+        const voiceText = `联网检索成功！我为您查到了 ${currentSearchEvents.value.length} 个相关的实践活动。您可以点击卡片一键添加至日历中。`
+        sessionStore.addMessage({
+          role: 'system',
+          content: voiceText,
+          type: 'search',
+          metadata: {
+            web_search_response: {
+              session_id: sessionStore.sessionId,
+              status: 'success',
+              search_raw_query: text,
+              extracted_events: currentSearchEvents.value,
+              reply_text: voiceText
+            }
+          }
+        })
+        speakText(voiceText)
+        scrollToBottom()
+      }, 1200)
+    }, 1500)
+
   } else if (text.includes('两点') || text.includes('14:00')) {
     // 触发时间冲突
     sessionStore.setVoiceState('conflict')
@@ -433,29 +614,37 @@ function handleSkipClarification() {
   setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
 }
 
-function handleSelectFreeBusyWindow(w: { start: string; end: string; score: number }) {
-  showFreeBusy.value = false
+
+
+function handleSearchAddEvent(event: WebSearchEvent) {
+  vibrate('success')
   calendarStore.addEvent({
-    id: `ev-${Date.now()}`,
-    title: '多人协同联合技术交流会',
-    start_time: w.start,
-    end_time: w.end,
+    id: `ev-search-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    title: event.title,
+    start_time: event.start_time,
+    end_time: event.end_time,
+    location: event.location,
     calendar_id: 'work',
     calendar_name: '工作',
     color: '#8B5CF6',
     is_deleted: false,
     version_tag: 'v1',
+    voice_raw_text: currentSearchQuery.value,
     created_at: new Date().toISOString()
   })
-  sessionStore.setVoiceState('success')
+  
+  const textFeedback = `已成功将“${event.title}”添加入您的日历日程！`
   sessionStore.addMessage({
     role: 'system',
-    content: `好的，已成功协调所有参与者，创建明天联合会议于 ${w.start.substring(11, 16)} - ${w.end.substring(11, 16)}`,
+    content: textFeedback,
     type: 'result'
   })
-  vibrate('success')
-  speakText('联合会议创建成功！')
-  setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
+  speakText(textFeedback)
+  scrollToBottom()
+}
+
+function handleSearchRetry() {
+  processUserInput(currentSearchQuery.value)
 }
 
 function speakLastMessage() {
@@ -539,11 +728,7 @@ onMounted(() => {
   margin: var(--vc-space-sm) 0;
 }
 
-.freebusy-container {
-  display: flex;
-  flex-direction: column;
-  gap: var(--vc-space-md);
-}
+
 
 /* 底部操作区 */
 .conversation-footer {
@@ -555,16 +740,105 @@ onMounted(() => {
   gap: var(--vc-space-md);
 }
 
-.footer-transcript {
-  min-height: 40px;
+/* 形态切换容器 (Morph Input Block) */
+.footer-input-morph {
+  width: 100%;
+  min-height: 52px;
+  position: relative;
+}
+
+.morph-input-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--vc-space-sm);
+  background: var(--vc-bg-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-md);
+  padding: var(--vc-space-xs) var(--vc-space-sm);
+  transition: all var(--vc-transition-base);
+  box-shadow: var(--vc-shadow-sm);
+}
+
+.morph-input-bar:focus-within {
+  border-color: var(--vc-accent);
+  box-shadow: 0 0 0 3px hsla(var(--vc-accent-h), var(--vc-accent-s), var(--vc-accent-l), 0.12);
+  background: var(--vc-bg-elevated);
+}
+
+.morph-input-icon {
+  font-size: 16px;
+  opacity: 0.6;
+}
+
+.keyboard-text-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px var(--vc-space-xs);
+  color: var(--vc-text-primary);
+  font-size: var(--vc-text-sm);
+  outline: none;
+}
+
+.keyboard-text-input::placeholder {
+  color: var(--vc-text-tertiary);
+}
+
+.morph-input-submit {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--vc-radius-sm);
+  background: var(--vc-bg-elevated);
+  border: 1px solid var(--vc-border);
+  color: var(--vc-text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--vc-transition-fast);
+}
+
+.morph-input-submit:hover:not(:disabled) {
+  border-color: var(--vc-accent);
+  background: hsla(var(--vc-accent-h), var(--vc-accent-s), var(--vc-accent-l), 0.08);
+  color: var(--vc-text-primary);
+}
+
+.morph-input-submit:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.morph-transcript-bar {
+  width: 100%;
+}
+
+/* 动效过渡 */
+.morph-fade-enter-active,
+.morph-fade-leave-active {
+  transition: all var(--vc-transition-fast);
+}
+
+.morph-fade-enter-from,
+.morph-fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .footer-visualizer {
   display: flex;
   justify-content: center;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: all var(--vc-transition-base);
+}
+
+.footer-visualizer--visible {
+  max-height: 64px;
+  opacity: 1;
+  margin: var(--vc-space-sm) 0;
 }
 
 .footer-suggestions {
@@ -572,11 +846,11 @@ onMounted(() => {
   gap: var(--vc-space-sm);
   overflow-x: auto;
   padding-bottom: var(--vc-space-xs);
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none;
 }
 
 .footer-suggestions::-webkit-scrollbar {
-  display: none; /* Chrome/Safari */
+  display: none;
 }
 
 .suggestion-pill {
@@ -593,7 +867,7 @@ onMounted(() => {
 .suggestion-pill:hover {
   border-color: var(--vc-primary-light);
   color: var(--vc-text-primary);
-  background: rgba(var(--vc-primary-h), 76%, 0.08);
+  background: hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.08);
 }
 
 .footer-control-row {
@@ -603,9 +877,22 @@ onMounted(() => {
   gap: var(--vc-space-sm);
 }
 
+.main-mic-button-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--vc-space-xs);
+}
+
 .main-mic-button {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.morph-mic-tip {
+  font-size: 10px;
+  color: var(--vc-text-tertiary);
+  transition: opacity var(--vc-transition-base);
 }
 </style>

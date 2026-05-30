@@ -6,44 +6,44 @@
 :root {
   /* ── 色彩令牌（暗色主题） ─────────────────────────── */
 
-  /* 主色调 — 深邃星空蓝 */
-  --vc-primary-h: 224;
-  --vc-primary-s: 76%;
-  --vc-primary-l: 48%;
+  /* 主色调 — 沉稳石墨灰 (Graphite Slate) */
+  --vc-primary-h: 215;
+  --vc-primary-s: 18%;
+  --vc-primary-l: 35%;
   --vc-primary: hsl(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l));
-  --vc-primary-light: hsl(var(--vc-primary-h), var(--vc-primary-s), 62%);
-  --vc-primary-dark: hsl(var(--vc-primary-h), var(--vc-primary-s), 36%);
-  --vc-primary-glow: hsl(var(--vc-primary-h), 90%, 55%);
+  --vc-primary-light: hsl(var(--vc-primary-h), var(--vc-primary-s), 55%);
+  --vc-primary-dark: hsl(var(--vc-primary-h), var(--vc-primary-s), 22%);
+  --vc-primary-glow: hsl(var(--vc-primary-h), var(--vc-primary-s), 45%);
 
-  /* 强调色 — 极光紫 */
-  --vc-accent-h: 270;
-  --vc-accent-s: 72%;
-  --vc-accent-l: 56%;
+  /* 强调色 — 优雅古铜金 (Sober Bronze Sand) */
+  --vc-accent-h: 36;
+  --vc-accent-s: 16%;
+  --vc-accent-l: 48%;
   --vc-accent: hsl(var(--vc-accent-h), var(--vc-accent-s), var(--vc-accent-l));
-  --vc-accent-light: hsl(var(--vc-accent-h), var(--vc-accent-s), 70%);
+  --vc-accent-light: hsl(var(--vc-accent-h), var(--vc-accent-s), 62%);
 
-  /* 语义色 */
-  --vc-success: hsl(152, 68%, 46%);
-  --vc-success-soft: hsla(152, 68%, 46%, 0.15);
-  --vc-warning: hsl(38, 92%, 50%);
-  --vc-warning-soft: hsla(38, 92%, 50%, 0.15);
-  --vc-danger: hsl(0, 78%, 56%);
-  --vc-danger-soft: hsla(0, 78%, 56%, 0.15);
-  --vc-info: hsl(200, 80%, 52%);
-  --vc-info-soft: hsla(200, 80%, 52%, 0.12);
+  /* 语义色 — 商务克制调 */
+  --vc-success: hsl(150, 20%, 45%);
+  --vc-success-soft: hsla(150, 20%, 45%, 0.15);
+  --vc-warning: hsl(35, 30%, 45%);
+  --vc-warning-soft: hsla(35, 30%, 45%, 0.15);
+  --vc-danger: hsl(0, 30%, 50%);
+  --vc-danger-soft: hsla(0, 30%, 50%, 0.15);
+  --vc-info: hsl(210, 25%, 45%);
+  --vc-info-soft: hsla(210, 25%, 45%, 0.12);
 
-  /* 录音状态色 */
-  --vc-recording: hsl(0, 85%, 58%);
-  --vc-recording-glow: hsla(0, 85%, 58%, 0.35);
-  --vc-processing: hsl(38, 92%, 50%);
-  --vc-processing-glow: hsla(38, 92%, 50%, 0.3);
+  /* 录音状态色 — 朴素雅红 */
+  --vc-recording: hsl(0, 35%, 52%);
+  --vc-recording-glow: hsla(0, 35%, 52%, 0.2);
+  --vc-processing: hsl(35, 30%, 45%);
+  --vc-processing-glow: hsla(35, 30%, 45%, 0.15);
 
-  /* 背景层级 */
-  --vc-bg-base: hsl(225, 25%, 8%);
-  --vc-bg-surface: hsl(225, 22%, 12%);
-  --vc-bg-elevated: hsl(225, 20%, 16%);
-  --vc-bg-overlay: hsla(225, 25%, 6%, 0.85);
-  --vc-bg-glass: hsla(225, 20%, 16%, 0.65);
+  /* 背景层级 — 石墨灰黑 */
+  --vc-bg-base: hsl(215, 12%, 10%);
+  --vc-bg-surface: hsl(215, 10%, 14%);
+  --vc-bg-elevated: hsl(215, 10%, 18%);
+  --vc-bg-overlay: hsla(215, 12%, 8%, 0.9);
+  --vc-bg-glass: hsla(215, 10%, 14%, 0.8);
 
   /* 文字层级 */
   --vc-text-primary: hsl(220, 15%, 94%);
@@ -66,10 +66,10 @@
   --vc-space-3xl: 64px;
 
   /* ── 圆角 ────────────────────────────────────────── */
-  --vc-radius-sm: 6px;
-  --vc-radius-md: 12px;
-  --vc-radius-lg: 20px;
-  --vc-radius-xl: 28px;
+  --vc-radius-sm: 4px;
+  --vc-radius-md: 8px;
+  --vc-radius-lg: 12px;
+  --vc-radius-xl: 16px;
   --vc-radius-full: 9999px;
 
   /* ── 字体 ────────────────────────────────────────── */
@@ -98,11 +98,11 @@
   --vc-weight-bold: 700;
 
   /* ── 阴影 ────────────────────────────────────────── */
-  --vc-shadow-sm: 0 1px 3px hsla(0, 0%, 0%, 0.3);
-  --vc-shadow-md: 0 4px 12px hsla(0, 0%, 0%, 0.35);
-  --vc-shadow-lg: 0 8px 30px hsla(0, 0%, 0%, 0.4);
-  --vc-shadow-glow: 0 0 20px var(--vc-primary-glow);
-  --vc-shadow-recording: 0 0 30px var(--vc-recording-glow);
+  --vc-shadow-sm: 0 1px 2px hsla(0, 0%, 0%, 0.2);
+  --vc-shadow-md: 0 4px 8px hsla(0, 0%, 0%, 0.25);
+  --vc-shadow-lg: 0 8px 16px hsla(0, 0%, 0%, 0.3);
+  --vc-shadow-glow: 0 0 8px var(--vc-primary-glow);
+  --vc-shadow-recording: 0 0 10px var(--vc-recording-glow);
 
   /* ── 过渡 ────────────────────────────────────────── */
   --vc-transition-fast: 120ms ease;
@@ -126,20 +126,20 @@
 
 /* ── 亮色主题覆盖 ──────────────────────────────────── */
 [data-theme="light"] {
-  --vc-bg-base: hsl(225, 20%, 97%);
-  --vc-bg-surface: hsl(225, 18%, 100%);
-  --vc-bg-elevated: hsl(225, 15%, 96%);
-  --vc-bg-overlay: hsla(225, 20%, 100%, 0.85);
-  --vc-bg-glass: hsla(225, 18%, 100%, 0.7);
+  --vc-bg-base: hsl(215, 10%, 95%);
+  --vc-bg-surface: hsl(215, 10%, 98%);
+  --vc-bg-elevated: hsl(215, 10%, 93%);
+  --vc-bg-overlay: hsla(215, 10%, 98%, 0.9);
+  --vc-bg-glass: hsla(215, 10%, 98%, 0.8);
 
-  --vc-text-primary: hsl(225, 25%, 12%);
-  --vc-text-secondary: hsl(220, 12%, 42%);
-  --vc-text-tertiary: hsl(220, 10%, 62%);
+  --vc-text-primary: hsl(215, 20%, 15%);
+  --vc-text-secondary: hsl(215, 12%, 40%);
+  --vc-text-tertiary: hsl(215, 10%, 60%);
 
-  --vc-border: hsla(220, 15%, 60%, 0.18);
-  --vc-divider: hsla(220, 15%, 60%, 0.08);
+  --vc-border: hsla(215, 15%, 50%, 0.15);
+  --vc-divider: hsla(215, 15%, 50%, 0.06);
 
-  --vc-shadow-sm: 0 1px 3px hsla(0, 0%, 0%, 0.08);
-  --vc-shadow-md: 0 4px 12px hsla(0, 0%, 0%, 0.1);
-  --vc-shadow-lg: 0 8px 30px hsla(0, 0%, 0%, 0.12);
+  --vc-shadow-sm: 0 1px 2px hsla(0, 0%, 0%, 0.05);
+  --vc-shadow-md: 0 4px 8px hsla(0, 0%, 0%, 0.08);
+  --vc-shadow-lg: 0 8px 16px hsla(0, 0%, 0%, 0.1);
 }

@@ -1,0 +1,50 @@
+# Voice Calendar Backend Dependencies
+# 智能语音日历后端依赖
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy[asyncio]==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+
+# Redis
+redis[hiredis]==5.0.1
+
+# LLM Integration
+langchain==0.1.4
+langchain-core==0.1.10
+openai==1.10.0
+
+# STT (Speech-to-Text)
+faster-whisper==0.10.0
+
+# TTS (Text-to-Speech)
+edge-tts==6.1.9
+
+# Timezone handling
+pytz==2024.1
+
+# Data validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# HTTP client
+httpx==0.26.0
+
+# WebSocket support
+websockets==12.0
+
+# Audio processing
+numpy==1.26.3
+scipy==1.12.0
+
+# Utils
+python-dateutil==2.8.2
+orjson==3.9.10

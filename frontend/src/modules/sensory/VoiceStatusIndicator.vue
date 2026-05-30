@@ -25,6 +25,7 @@ const label = computed(() => {
     conflict: '检测到时间冲突',
     success: '操作成功',
     error: '出现错误',
+    searching: '正在联网检索...',
   }
   return labels[props.status]
 })
@@ -59,8 +60,8 @@ const ariaLive = computed(() =>
 
 .voice-status--recording {
   color: var(--vc-recording);
-  border-color: hsla(0, 85%, 58%, 0.3);
-  background: hsla(0, 85%, 58%, 0.08);
+  border-color: hsla(0, 35%, 52%, 0.25);
+  background: hsla(0, 35%, 52%, 0.06);
 }
 .voice-status--recording .voice-status__dot {
   background: var(--vc-recording);
@@ -69,8 +70,8 @@ const ariaLive = computed(() =>
 
 .voice-status--processing {
   color: var(--vc-processing);
-  border-color: hsla(38, 92%, 50%, 0.3);
-  background: hsla(38, 92%, 50%, 0.08);
+  border-color: hsla(35, 30%, 45%, 0.25);
+  background: hsla(35, 30%, 45%, 0.06);
 }
 .voice-status--processing .voice-status__dot {
   background: var(--vc-processing);
@@ -79,7 +80,8 @@ const ariaLive = computed(() =>
 
 .voice-status--tts_playing {
   color: var(--vc-info);
-  border-color: hsla(200, 80%, 52%, 0.3);
+  border-color: hsla(210, 25%, 45%, 0.2);
+  background: hsla(210, 25%, 45%, 0.04);
 }
 .voice-status--tts_playing .voice-status__dot {
   background: var(--vc-info);
@@ -87,7 +89,7 @@ const ariaLive = computed(() =>
 
 .voice-status--success {
   color: var(--vc-success);
-  border-color: hsla(152, 68%, 46%, 0.3);
+  border-color: hsla(150, 20%, 45%, 0.2);
   background: var(--vc-success-soft);
 }
 .voice-status--success .voice-status__dot {
@@ -97,7 +99,7 @@ const ariaLive = computed(() =>
 .voice-status--conflict,
 .voice-status--error {
   color: var(--vc-danger);
-  border-color: hsla(0, 78%, 56%, 0.3);
+  border-color: hsla(0, 30%, 50%, 0.2);
   background: var(--vc-danger-soft);
 }
 .voice-status--conflict .voice-status__dot,
@@ -107,9 +109,20 @@ const ariaLive = computed(() =>
 
 .voice-status--clarifying {
   color: var(--vc-accent);
-  border-color: hsla(270, 72%, 56%, 0.3);
+  border-color: hsla(36, 16%, 48%, 0.2);
+  background: hsla(36, 16%, 48%, 0.04);
 }
 .voice-status--clarifying .voice-status__dot {
+  background: var(--vc-accent);
+  animation: vc-blink 1.4s ease-in-out infinite;
+}
+
+.voice-status--searching {
+  color: var(--vc-accent);
+  border-color: hsla(36, 16%, 48%, 0.2);
+  background: hsla(36, 16%, 48%, 0.04);
+}
+.voice-status--searching .voice-status__dot {
   background: var(--vc-accent);
   animation: vc-blink 1.4s ease-in-out infinite;
 }

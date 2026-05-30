@@ -3,7 +3,7 @@
     <!-- 顶部状态栏 -->
     <header class="default-layout__header vc-glass">
       <div class="header-brand">
-        <span class="header-brand__logo">🎙️</span>
+        <img class="header-brand__logo" src="@/assets/logo.png" alt="语音日历 Logo" />
         <h1 class="header-brand__title vc-gradient-text">语音日历</h1>
       </div>
       <div class="header-status">
@@ -24,7 +24,14 @@
     <!-- 底部导航栏 -->
     <nav class="default-layout__nav vc-glass" role="navigation" aria-label="底部导航">
       <router-link to="/" class="nav-item" active-class="nav-item--active">
-        <span class="nav-item__icon" aria-hidden="true">📅</span>
+        <span class="nav-item__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+        </span>
         <span class="nav-item__label">日程</span>
       </router-link>
 
@@ -36,13 +43,24 @@
         @click="goToAssistant"
       >
         <div class="voice-fab__circle">
-          <span class="voice-fab__icon" aria-hidden="true">🎙️</span>
+          <span class="voice-fab__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="22" />
+            </svg>
+          </span>
         </div>
         <div class="voice-fab__ring" />
       </button>
 
       <router-link to="/settings" class="nav-item" active-class="nav-item--active">
-        <span class="nav-item__icon" aria-hidden="true">⚙️</span>
+        <span class="nav-item__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </span>
         <span class="nav-item__label">设置</span>
       </router-link>
     </nav>
@@ -99,7 +117,9 @@ function goToAssistant() {
 }
 
 .header-brand__logo {
-  font-size: 20px;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
 }
 
 .header-brand__title {
@@ -190,7 +210,7 @@ function goToAssistant() {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 15px rgba(var(--vc-primary-h), 48%, 0.35);
+  box-shadow: 0 4px 15px hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.35);
   transition: all var(--vc-transition-spring);
   border: 2px solid var(--vc-bg-base);
 }
@@ -215,7 +235,7 @@ function goToAssistant() {
 
 .voice-fab:hover .voice-fab__circle {
   transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 8px 25px rgba(var(--vc-primary-h), 48%, 0.5);
+  box-shadow: 0 8px 25px hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.5);
 }
 
 .voice-fab:hover .voice-fab__icon {
@@ -238,9 +258,9 @@ function goToAssistant() {
 
 /* 动效定义 */
 @keyframes pulse {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  0% { transform: scale(1); box-shadow: 0 0 0 0 hsla(0, 35%, 52%, 0.4); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 15px hsla(0, 35%, 52%, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 hsla(0, 35%, 52%, 0); }
 }
 
 @keyframes ripple {

@@ -12,7 +12,6 @@ import type {
   EventDraft,
   TaskDraft,
   ConflictResult,
-  FreeBusyResult,
 } from '@/types/contracts'
 
 export const useSessionStore = defineStore('session', () => {
@@ -36,7 +35,6 @@ export const useSessionStore = defineStore('session', () => {
 
   // ── 冲突与忙闲（临时状态）─────────────────────
   const currentConflict = ref<ConflictResult | null>(null)
-  const currentFreeBusy = ref<FreeBusyResult | null>(null)
 
   // ── 流式转写（实时）──────────────────────────────
   const partialTranscript = ref<string>('')
@@ -98,10 +96,6 @@ export const useSessionStore = defineStore('session', () => {
     currentConflict.value = conflict
   }
 
-  function setFreeBusy(result: FreeBusyResult | null) {
-    currentFreeBusy.value = result
-  }
-
   function login(email: string, name: string) {
     isLoggedIn.value = true
     currentUser.value = { name, email, avatar: '🎙️' }
@@ -124,7 +118,6 @@ export const useSessionStore = defineStore('session', () => {
     currentEventDraft.value = null
     currentTaskDraft.value = null
     currentConflict.value = null
-    currentFreeBusy.value = null
     partialTranscript.value = ''
     finalTranscript.value = ''
   }
@@ -140,7 +133,6 @@ export const useSessionStore = defineStore('session', () => {
     currentEventDraft,
     currentTaskDraft,
     currentConflict,
-    currentFreeBusy,
     partialTranscript,
     finalTranscript,
     // 计算属性
@@ -159,7 +151,6 @@ export const useSessionStore = defineStore('session', () => {
     setEventDraft,
     setTaskDraft,
     setConflict,
-    setFreeBusy,
     clearSession,
     login,
     logout,

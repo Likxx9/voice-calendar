@@ -35,7 +35,7 @@ withDefaults(defineProps<{
 
 .streaming-transcript--active {
   border-color: var(--vc-border-active);
-  box-shadow: 0 0 0 3px hsla(224, 76%, 48%, 0.1);
+  box-shadow: 0 0 0 3px hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.1);
 }
 
 .streaming-transcript__text {

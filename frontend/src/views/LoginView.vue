@@ -9,7 +9,7 @@
     <!-- 登录卡片 -->
     <div class="login-card vc-glass">
       <header class="login-card__header">
-        <div class="brand-logo" aria-hidden="true">🎙️</div>
+        <img class="brand-logo" src="@/assets/logo.png" alt="语音日历 Logo" />
         <h2 class="brand-title vc-gradient-text">语音日历</h2>
         <p class="brand-subtitle">智能日程，声临其境</p>
       </header>
@@ -174,9 +174,11 @@ function handleLogin() {
 }
 
 .brand-logo {
-  font-size: 54px;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
   margin-bottom: var(--vc-space-xs);
-  animation: logoPulse 2s infinite ease-in-out;
+  animation: logoPulse 2.5s infinite ease-in-out;
 }
 
 @keyframes logoPulse {
@@ -242,7 +244,7 @@ function handleLogin() {
 .form-input:focus {
   border-color: var(--vc-accent);
   background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 10px rgba(var(--vc-accent-h), 72%, 0.15);
+  box-shadow: 0 0 10px hsla(var(--vc-accent-h), var(--vc-accent-s), var(--vc-accent-l), 0.15);
 }
 
 /* 按钮 */
@@ -254,13 +256,13 @@ function handleLogin() {
   padding: var(--vc-space-md);
   border-radius: var(--vc-radius-md);
   transition: all var(--vc-transition-base);
-  box-shadow: 0 4px 15px rgba(var(--vc-primary-h), 76%, 0.25);
+  box-shadow: 0 4px 15px hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.25);
   margin-top: var(--vc-space-sm);
 }
 
 .login-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(var(--vc-primary-h), 76%, 0.4);
+  box-shadow: 0 8px 25px hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.4);
 }
 
 .login-btn:active {

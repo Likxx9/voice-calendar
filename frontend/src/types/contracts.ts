@@ -89,29 +89,30 @@ export interface ConflictResult {
 }
 
 // ────────────────────────────────────────────────────────────
-// M4 → M8: 多方忙闲查询请求
+// M9: 联网检索数据契约
 // ────────────────────────────────────────────────────────────
-export interface FreeBusyRequest {
-  attendees: string[]           // 目标人员 Email 列表
+export interface WebSearchRequest {
+  session_id: string
+  query: string                 // 搜索词
+  max_results?: number
+  search_depth?: 'shallow' | 'deep'
+}
+
+export interface WebSearchEvent {
+  title: string
   start_time: string            // ISO 8601
   end_time: string
+  location: string
+  description: string
+  source_url?: string           // 来源链接
 }
 
-export interface FreeBusySlot {
-  email: string
-  busy_periods: Array<{
-    start: string
-    end: string
-  }>
-}
-
-export interface FreeBusyResult {
-  attendees: FreeBusySlot[]
-  free_windows: Array<{
-    start: string
-    end: string
-    score: number               // 推荐评分
-  }>
+export interface WebSearchResponse {
+  session_id: string
+  status: 'success' | 'ambiguous' | 'no_results' | 'error'
+  search_raw_query: string
+  extracted_events: WebSearchEvent[]
+  reply_text: string
 }
 
 // ────────────────────────────────────────────────────────────
@@ -159,7 +160,6 @@ export type WSFrameType =
   | 'TTS_DONE'                // M2→M1 TTS 播报完毕
   | 'VAD_TIMEOUT_ADJUST'      // M2→M1 VAD 断句调控
   | 'WS_INTENT_INTERRUPT'     // M1→M2 Barge-in 打断
-  | 'FREEBUSY_RESULT'         // M8→M1 忙闲结果
   | 'SYNC_STATUS'             // M6→M1 同步状态
   | 'HEARTBEAT'               // 心跳
 
@@ -182,6 +182,7 @@ export type VoiceState =
   | 'conflict'               // 冲突协商中
   | 'success'                // 操作成功
   | 'error'                  // 错误
+  | 'searching'              // 联网检索中
 
 export type ConnectionState =
   | 'connected'
@@ -237,12 +238,12 @@ export interface ConversationMessage {
   role: 'user' | 'system'
   content: string
   timestamp: string
-  type: 'text' | 'voice' | 'clarification' | 'conflict' | 'result'
+  type: 'text' | 'voice' | 'clarification' | 'conflict' | 'result' | 'search'
   metadata?: {
     event_draft?: EventDraft
     task_draft?: TaskDraft
     conflict_result?: ConflictResult
-    freebusy_result?: FreeBusyResult
+    web_search_response?: WebSearchResponse
     suggestions?: string[]
   }
 }

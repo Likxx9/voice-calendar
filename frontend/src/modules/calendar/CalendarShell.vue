@@ -313,7 +313,7 @@ function navigate(dir: number) {
 }
 
 .calendar-shell__day-cell--selected {
-  background: hsla(224, 76%, 48%, 0.1);
+  background: hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.1);
   border: 1px solid var(--vc-border-active);
 }
 
@@ -384,7 +384,7 @@ function navigate(dir: number) {
   font-size: var(--vc-text-xs);
   font-weight: var(--vc-weight-medium);
   color: var(--vc-primary-light);
-  background: hsla(224, 76%, 48%, 0.1);
+  background: hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.1);
   padding: 2px 12px;
   border-radius: var(--vc-radius-full);
 }

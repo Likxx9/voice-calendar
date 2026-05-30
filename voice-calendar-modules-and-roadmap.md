@@ -112,6 +112,15 @@
   2. **敏感细节脱敏拉取**：调用 Google/CalDAV `FreeBusy` 接口，仅拉取包含起止时间的 `BUSY` 时段列表，严格屏蔽具体的会议标题与内容（保护隐私，场景九）。
   3. **空闲窗口重合度计算**：在内存中求出所有协同人员 `BUSY` 时间段的并集（Union），再取查询范围时间轴的补集，计算出重合的 `FREE` 空闲时间窗，为状态机 M4 提供推荐时间段（场景九）。
 
+### M9：联网检索智能体模块 (Web Search Agent Module) [已在前端与状态机沙盒中完整集成实现（Phase 2）]
+* **所属分层**：3. 核心领域服务层与外部 Web Search API
+* **职责**：当用户查询超出系统本地知识或具有强时效性/未来时效性的外部信息时（如漫展时间、天气预报、突发事件、节日排期等），调用外部搜索引擎获取最新的互联网数据，并通过大模型对检索结果进行结构化日程/任务提取与规划。
+* **核心功能**：
+  1. **时效性意图嗅探与路由**：当 ASR 转写结果进入 M3 时，若语义分类引擎嗅探出用户指令涉及外部时效信息（如“我想参加2026年杭州的漫展”），判断其非系统内部静态指令，自动将控制权流转至 M9 联网检索模块。
+  2. **Web 搜索工具集成**：通过六边形架构的 `IWebSearchPort`，调用外部搜索适配器（如 Tavily Search Adapter 或 Google Search Adapter），获取互联网实时网页切片与检索段落。
+  3. **结构化日程实体提炼**：使用大模型（LLM）对检索返回的非结构化网页文本进行深度语义建模，提炼出规范的日程（标题、起止时间、举办场馆、购票链接、活动描述）或待办任务信息。
+  4. **多值歧义主动追问**：若搜索结果发现多个匹配事件（例如 2026 年在杭州有多个不同日期举办 of 漫展），自动生成选项包，向 M4 状态机抛出 `AmbiguousSearch` 异常，触发多轮语音追问（如：“为您查到2026年杭州有5月的动漫节和10月的漫展，请问您想参加哪一个？”）。
+
 ---
 
 ## 3. 模块间的显式耦合与协同契约
@@ -124,6 +133,12 @@
                                                                         │
                                                                         │ 文本与基准时间
  M4：状态机/LangGraph <────────── [SemanticOutput] <──────────── M3：语义分类引擎
+        │                                                               │
+        │                                                     嗅探外部检索指令
+        │                                                               │
+        ├───── 联网检索请求 ────── [SearchQuery] ──────────────────────> M9：联网检索Agent
+        │                                                               │
+        │<──── 结构化日程草稿 ─── [SemanticOutput] ─────────────────────┘
         │
         ├───── 写入前检查忙闲 ─── [EventDraft/Emails] ──────────> M8：多方协同计算
         │                                                               │
@@ -226,7 +241,36 @@ interface SyncPayload {
     payload: any;             // 被变更的具体字段集合
     original_version_tag: string; // 离线变更前的云端原始版本戳，用于冲突校验
     executed_at: string;      // 本地离线执行动作的时间戳
+  ][];
+}
+```
+
+### 3.6 M3/M4 ──(Search Request)──> M9 ──(Parse Result)──> M4
+* **耦合通道**：智能体动作触发与 Function Calling 数据流。
+* **契约数据结构 (`WebSearchRequest` & `WebSearchResponse`)**：
+```typescript
+// 1. M3/M4 触发 M9 的联网搜索请求
+interface WebSearchRequest {
+  session_id: string;
+  query: string;             // 搜索检索词，如 "2026年杭州漫展 时间 地点"
+  max_results?: number;      // 最大搜索条数
+  search_depth?: "shallow" | "deep"; // 检索深度，默认为 deep
+}
+
+// 2. M9 检索并结构化解析后返回给 M4 状态机的数据
+interface WebSearchResponse {
+  session_id: string;
+  status: "success" | "ambiguous" | "no_results" | "error";
+  search_raw_query: string;
+  extracted_events: {
+    title: string;
+    start_time: string;      // ISO 8601，如 "2026-05-01T09:00:00+08:00"
+    end_time: string;
+    location: string;
+    description: string;
+    source_url?: string;     // 检索来源网页链接
   }[];
+  reply_text: string;        // 预置播报文本，若成功则为提示确认，若歧义则为追问列表
 }
 ```
 
@@ -261,6 +305,7 @@ interface SyncPayload {
   2. **M3 字典模糊对齐层**：开发拼音匹配和编辑距离比对，结合联系人与常用地点词典，在 LLM 提取前实现口语字模糊对齐（解决同音字识别错误，场景二）。
   3. **M3 双通道分类器**：在 Prompt 中注入任务/日历事件的分类判据。大模型输出 `create_task` 等工具参数。
   4. **M5 数据库全面升级**：在 PostgreSQL 中建 `tasks`（待办表）、`contacts`（联系人表）和 `favorite_locations`（常用地点表）。
+  5. **M9 联网检索智能体**：集成外部网页搜索引擎适配器，实现时效性意图嗅探，大模型对非结构化网页进行深度实体提炼，并对多值歧义触发 `AmbiguousSearch` 追问与一键结构化日程写入。
 
 ### 4.3 Phase 3：极速全双工与感知硬件联调（全双工与无障碍阶段）
 * **开发目的**：实现极其流畅的长连接交互，支持随时打断与全屏无障碍操作，完全释放驾驶与障碍场景价值。
@@ -284,7 +329,7 @@ interface SyncPayload {
 ### 5.1 并行开发计划
 通过定义的显式契约，研发团队可分为三组完全并行开发：
 * **第一组（适配层与数据库开发）**：负责 M5 关系型冲突数据库与 M7 外部服务适配层接口实现。
-* **第二组（AI中枢与语义状态机开发）**：负责 M3 语义理解与模糊纠偏、M4 LangGraph 追问状态机、以及 M8 多方空闲计算。
+* **第二组（AI中枢与语义状态机开发）**：负责 M3 语义理解与模糊纠偏、M4 LangGraph 追问状态机、以及冲突碰撞策略。
 * **第三组（前端及网关通信开发）**：负责 M1 语音感知流式组件、M2 WebSocket 双向网关及 M6 离线缓存队列。
 
 ### 5.2 核心测试边界

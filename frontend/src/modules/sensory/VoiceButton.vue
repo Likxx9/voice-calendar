@@ -102,6 +102,7 @@ const ariaLabel = computed(() => {
     conflict: '检测到时间冲突',
     success: '操作成功',
     error: '出现错误，请重试',
+    searching: '正在联网检索',
   }
   return labels[props.status]
 })
@@ -147,7 +148,8 @@ function handleTouchEnd() {
   width: var(--btn-size);
   height: var(--btn-size);
   border-radius: var(--vc-radius-full);
-  background: linear-gradient(135deg, var(--btn-color), var(--vc-accent));
+  background: var(--btn-color);
+  border: 1px solid var(--vc-border);
   color: white;
   display: flex;
   align-items: center;
@@ -156,46 +158,56 @@ function handleTouchEnd() {
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
-  transition: transform var(--vc-transition-fast), box-shadow var(--vc-transition-base);
-  box-shadow: var(--vc-shadow-md), 0 0 0 0 transparent;
+  transition: all var(--vc-transition-fast);
+  box-shadow: var(--vc-shadow-md);
   z-index: var(--vc-z-fab);
 }
 
 .voice-button:hover {
-  transform: scale(1.05);
-  box-shadow: var(--vc-shadow-lg), var(--vc-shadow-glow);
+  border-color: var(--vc-accent-light);
+  box-shadow: var(--vc-shadow-lg);
+  background: var(--vc-primary-light);
 }
 
 .voice-button--pressed {
-  transform: scale(0.95);
+  transform: scale(0.96);
 }
 
 /* ── 状态色变 ──────────────────────────────────── */
 .voice-button--recording {
   --btn-color: var(--vc-recording);
-  animation: vc-pulse-recording 1.5s ease-in-out infinite;
+  border-color: var(--vc-recording);
 }
 
 .voice-button--processing {
   --btn-color: var(--vc-processing);
-  animation: vc-pulse-processing 2s ease-in-out infinite;
+  border-color: var(--vc-processing);
 }
 
 .voice-button--tts_playing {
   --btn-color: var(--vc-info);
+  border-color: var(--vc-info);
 }
 
 .voice-button--success {
   --btn-color: var(--vc-success);
+  border-color: var(--vc-success);
 }
 
 .voice-button--conflict,
 .voice-button--error {
   --btn-color: var(--vc-danger);
+  border-color: var(--vc-danger);
 }
 
 .voice-button--clarifying {
   --btn-color: var(--vc-accent);
+  border-color: var(--vc-accent);
+}
+
+.voice-button--searching {
+  --btn-color: var(--vc-accent);
+  border-color: var(--vc-accent);
 }
 
 /* ── 脉冲光环 ──────────────────────────────────── */
@@ -219,10 +231,10 @@ function handleTouchEnd() {
 @keyframes voice-btn-pulse-ring {
   0% {
     transform: scale(1);
-    opacity: 0.6;
+    opacity: 0.4;
   }
   100% {
-    transform: scale(1.6);
+    transform: scale(1.15);
     opacity: 0;
   }
 }

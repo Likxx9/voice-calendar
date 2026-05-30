@@ -140,7 +140,7 @@ img, svg, video {
 }
 
 .vc-gradient-text {
-  background: linear-gradient(135deg, var(--vc-primary-light), var(--vc-accent));
+  background: linear-gradient(135deg, var(--vc-text-primary), var(--vc-accent-light));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
