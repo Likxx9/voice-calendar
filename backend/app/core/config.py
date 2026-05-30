@@ -4,6 +4,7 @@ Core configuration module
 """
 from pydantic_settings import BaseSettings
 from typing import List
+import os
 
 
 class Settings(BaseSettings):
@@ -15,10 +16,10 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     
-    # 数据库配置
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/voice_calendar"
+    # 数据库配置 - 开发环境使用SQLite
+    DATABASE_URL: str = "sqlite+aiosqlite:///./voice_calendar.db"
     
-    # Redis配置
+    # Redis配置 - 开发环境使用内存缓存
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # CORS配置

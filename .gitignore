@@ -1,23 +1,36 @@
-# Node / Frontend
-node_modules/
-frontend/node_modules/
-dist/
-frontend/dist/
-dist-ssr/
-frontend/dist-ssr/
-*.local
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.db
 
-# Logs
-logs/
-*.log
-npm-debug.log*
-
-# Editor directories and files
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+# Dependencies
+node_modules/
+venv/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+
+# Environment
+.env.local
+.env.*.local

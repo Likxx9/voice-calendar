@@ -4,8 +4,7 @@ Calendar Event Model
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Text, Boolean, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID, TSTZRANGE
+from sqlalchemy import Column, String, DateTime, Text, Boolean, ForeignKey, Index, Integer
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -15,8 +14,8 @@ class CalendarEvent(Base):
     """日历事件表"""
     __tablename__ = "calendar_events"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     
     # 事件信息
     title = Column(String(500), nullable=False)

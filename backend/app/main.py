@@ -9,7 +9,8 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api import calendar, websocket, health
+from app.api import calendar, health
+from app.websocket import voice as websocket
 
 
 @asynccontextmanager

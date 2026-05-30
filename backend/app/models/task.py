@@ -5,7 +5,6 @@ Todo Task Model
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Text, Boolean, Integer, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
 
@@ -14,8 +13,8 @@ class TodoTask(Base):
     """待办任务表"""
     __tablename__ = "todo_tasks"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     
     # 任务信息
     title = Column(String(500), nullable=False)
@@ -30,7 +29,7 @@ class TodoTask(Base):
     priority = Column(String(20), default="medium")  # low, medium, high
     
     # 关联
-    related_event_id = Column(UUID(as_uuid=True), nullable=True)  # 关联的日历事件
+    related_event_id = Column(String(36), nullable=True)  # 关联的日历事件
     
     # 状态
     is_completed = Column(Boolean, default=False)

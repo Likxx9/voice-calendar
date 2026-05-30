@@ -4,15 +4,21 @@ Database configuration and session management
 """
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+import os
 
 from app.core.config import settings
 
 
-# 创建异步引擎
+# 创建异步引擎 - SQLite需要特殊处理
+connect_args = {}
+if "sqlite" in settings.DATABASE_URL:
+    connect_args = {"check_same_thread": False}
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
-    future=True
+    future=True,
+    connect_args=connect_args
 )
 
 # 创建异步会话工厂

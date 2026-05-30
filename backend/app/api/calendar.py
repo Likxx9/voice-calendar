@@ -4,7 +4,6 @@ Calendar API Router
 """
 from datetime import datetime
 from typing import List, Optional
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, and_, or_, func
@@ -21,7 +20,7 @@ router = APIRouter()
 async def get_events(
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
-    user_id: UUID = Query(..., description="用户ID"),
+    user_id: str = Query(..., description="用户ID"),
     db: AsyncSession = Depends(get_db)
 ):
     """获取日历事件列表"""
@@ -47,7 +46,7 @@ async def get_events(
 
 @router.get("/events/{event_id}")
 async def get_event(
-    event_id: UUID,
+    event_id: str,
     db: AsyncSession = Depends(get_db)
 ):
     """获取单个事件详情"""
@@ -64,7 +63,7 @@ async def get_event(
 @router.post("/events")
 async def create_event(
     event_data: dict,
-    user_id: UUID = Query(..., description="用户ID"),
+    user_id: str = Query(..., description="用户ID"),
     db: AsyncSession = Depends(get_db)
 ):
     """创建新事件"""
@@ -91,7 +90,7 @@ async def create_event(
 
 @router.put("/events/{event_id}")
 async def update_event(
-    event_id: UUID,
+    event_id: str,
     event_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
@@ -117,7 +116,7 @@ async def update_event(
 
 @router.delete("/events/{event_id}")
 async def delete_event(
-    event_id: UUID,
+    event_id: str,
     db: AsyncSession = Depends(get_db)
 ):
     """删除事件（软删除）"""
@@ -138,8 +137,8 @@ async def delete_event(
 async def check_conflicts(
     start_time: str = Query(..., description="开始时间 ISO格式"),
     end_time: str = Query(..., description="结束时间 ISO格式"),
-    user_id: UUID = Query(..., description="用户ID"),
-    exclude_event_id: Optional[UUID] = Query(None, description="排除的事件ID"),
+    user_id: str = Query(..., description="用户ID"),
+    exclude_event_id: Optional[str] = Query(None, description="排除的事件ID"),
     db: AsyncSession = Depends(get_db)
 ):
     """检查时间冲突"""
