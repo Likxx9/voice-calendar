@@ -184,25 +184,43 @@ function handleWebSocketMessage(frame: WSFrame) {
   switch (frame.type) {
     case 'STATE_UPDATE':
       if (payload.state) sessionStore.setVoiceState(payload.state)
+      if (payload.message) {
+        sessionStore.addMessage({ role: 'system', content: payload.message, type: 'text' })
+      }
+      if (payload.quick_suggestions) {
+        // 可以将快捷建议传递给CenterWorkspace
+      }
       break
     case 'TRANSCRIPT_PARTIAL':
       sessionStore.updatePartialTranscript(payload.text)
       break
     case 'TRANSCRIPT_FINAL':
       sessionStore.setFinalTranscript(payload.text)
+      // 用户说的话也添加到消息列表
+      sessionStore.addMessage({ role: 'user', content: payload.text, type: 'voice' })
       break
     case 'CONFLICT_ALERT':
       sessionStore.setVoiceState('conflict')
       currentConflicts.value = payload.conflicts || []
       conflictSuggestions.value = payload.suggestions ? payload.suggestions.map((s:any) => s.reason || s) : ['推迟至下一个可用时间', '取消']
+      sessionStore.addMessage({ role: 'system', content: payload.message || '检测到时间冲突', type: 'conflict' })
       speakText(payload.message || '发现时间冲突')
       if (!isDesktop.value && currentPage.value !== 1) currentPage.value = 1
       break
     case 'ACTION_RESULT':
       sessionStore.setVoiceState('success')
       if (payload.event) calendarStore.addEvent(payload.event)
+      // 将操作结果添加到消息列表
+      sessionStore.addMessage({ role: 'system', content: payload.message || '操作已完成', type: 'result' })
       showSnackbar(payload.message || '操作已完成')
       setTimeout(() => sessionStore.setVoiceState('idle'), 1500)
+      break
+    case 'PLAYBACK_CONTROL':
+      // TTS播放控制
+      break
+    case 'CLARIFICATION_ASK':
+      sessionStore.setVoiceState('clarifying')
+      sessionStore.addMessage({ role: 'system', content: payload.message || '请补充信息', type: 'clarification' })
       break
   }
 }

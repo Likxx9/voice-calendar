@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     STT_MODEL: str = "sensevoice-large"
     STT_LANGUAGE: str = "zh"
 
+    # 科大讯飞 API 配置
+    XFYUN_APPID: str = ""
+    XFYUN_API_KEY: str = ""
+    XFYUN_API_SECRET: str = ""
+
     # TTS配置 - 云端: 火山引擎/讯飞
     TTS_MODEL: str = "volcano-tts"
     TTS_VOICE: str = "zh_female_shuangkuaisisi_moon_bigtts"
