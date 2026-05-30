@@ -158,8 +158,21 @@ async def voice_websocket(
         init_data = await websocket.receive_text()
         init_frame = json.loads(init_data)
         if init_frame.get("type") == "SESSION_INIT":
-            session_id = init_frame.get("session_id") or session_id
+            new_session_id = init_frame.get("session_id") or session_id
             user_id = init_frame.get("user_id") or user_id
+            
+            # 如果session_id变了，更新连接映射
+            if new_session_id != session_id:
+                manager.active_connections.pop(session_id, None)
+                manager.user_sessions.pop(session_id, None)
+                session_id = new_session_id
+                manager.active_connections[session_id] = websocket
+                if session_id not in manager.user_sessions:
+                    manager.user_sessions[session_id] = {
+                        "user_id": user_id,
+                        "connected_at": datetime.utcnow().isoformat(),
+                        "dialog_history": [],
+                    }
 
             # 发送初始状态 + 快捷建议（前端不再硬编码）
             dialog_history = manager.user_sessions.get(session_id, {}).get("dialog_history", [])
@@ -171,7 +184,19 @@ async def voice_websocket(
             })
 
         while True:
-            data = await websocket.receive_text()
+            ws_message = await websocket.receive()
+            if ws_message.get("type") == "websocket.receive":
+                if "bytes" in ws_message and ws_message["bytes"]:
+                    continue
+                data = ws_message.get("text", "")
+            elif "text" in ws_message:
+                data = ws_message["text"]
+            elif "bytes" in ws_message:
+                continue
+            else:
+                continue
+            if not data:
+                continue
             message = json.loads(data)
             msg_type = message.get("type")
 
@@ -202,8 +227,9 @@ async def voice_websocket(
 
 
 async def handle_audio_chunk(session_id: str, message: dict):
-    """处理音频数据块"""
-    is_final = message.get("is_final", False)
+    """处理音频数据块 - 支持前端WSFrame格式"""
+    payload = message.get("payload", message)
+    is_final = payload.get("is_final", False)
 
     if is_final:
         recognized_text = "提醒我明天下午三点开会"
@@ -224,8 +250,9 @@ async def handle_audio_chunk(session_id: str, message: dict):
 
 
 async def handle_text_input(session_id: str, message: dict):
-    """处理文本输入"""
-    text = message.get("text", "").strip()
+    """处理文本输入 - 支持前端WSFrame格式 {type, payload: {text}} 或扁平格式 {text}"""
+    payload = message.get("payload", message)
+    text = payload.get("text", "").strip()
     if not text:
         await manager.send_message(session_id, {"type": "error", "message": "Empty text input"})
         return
@@ -250,8 +277,9 @@ async def handle_search_add_event(session_id: str, message: dict):
     2. 返回创建结果
     3. 返回 TTS 播报文本
     """
-    event_data = message.get("event", {})
-    search_query = message.get("search_query", "")
+    payload = message.get("payload", message)
+    event_data = payload.get("event", {})
+    search_query = payload.get("search_query", "")
 
     event = await create_calendar_event({
         "title": event_data.get("title", "未命名事件"),

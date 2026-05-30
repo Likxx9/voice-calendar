@@ -108,8 +108,9 @@ function endPress() {
     clearTimeout(pressTimer.value)
     pressTimer.value = null
   }
-  if (!tapFired && props.voiceState === 'recording') {
-     emit('press-end')
+  if (tapFired) {
+    emit('press-end')
+    tapFired = false
   }
 }
 
