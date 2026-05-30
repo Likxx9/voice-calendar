@@ -67,9 +67,12 @@ class Settings(BaseSettings):
     TOOL_RETRY_CALENDAR: int = 3
     TOOL_RETRY_REMINDER: int = 5
 
-    # STT配置 - 云端: 讯飞/SenseVoice
-    STT_MODEL: str = "sensevoice-large"
+    # STT配置 - 科大讯飞语音听写（流式版）
+    STT_MODEL: str = "xfyun"
     STT_LANGUAGE: str = "zh"
+    XFYUN_APP_ID: str = "1bd4edcc"
+    XFYUN_API_KEY: str = "ada0f065b298e19b349200aba86f2128"
+    XFYUN_API_SECRET: str = "ZmQ1YTBjYWI5Zjk3NzZhYmFiZDMyMzg1"
 
     # 科大讯飞 API 配置
     XFYUN_APPID: str = ""

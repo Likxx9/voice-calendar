@@ -227,12 +227,28 @@ async def voice_websocket(
 
 
 async def handle_audio_chunk(session_id: str, message: dict):
-    """处理音频数据块 - 支持前端WSFrame格式"""
+    """处理音频数据块 - 支持前端WSFrame格式，使用科大讯飞语音识别"""
     payload = message.get("payload", message)
     is_final = payload.get("is_final", False)
-
+    audio_data = payload.get("audio_data", None)
+    
     if is_final:
-        recognized_text = "提醒我明天下午三点开会"
+        # 使用科大讯飞进行语音识别
+        recognized_text = ""
+        if audio_data:
+            try:
+                from app.services.xfyun_stt_service import xfyun_stt_service
+                # 解码base64音频数据
+                import base64
+                audio_bytes = base64.b64decode(audio_data) if isinstance(audio_data, str) else audio_data
+                recognized_text = await xfyun_stt_service.transcribe_audio(audio_bytes)
+            except Exception as e:
+                print(f"XFYun STT error: {e}")
+                recognized_text = ""
+        
+        if not recognized_text:
+            recognized_text = "无法识别语音内容"
+        
         await manager.send_message(session_id, {
             "type": "TRANSCRIPT_FINAL",
             "text": recognized_text,
