@@ -29,30 +29,22 @@ class Settings(BaseSettings):
         "http://localhost:8080"
     ]
 
-    # LLM配置 - 国产模型双路由（技术文档 §3.1.3）
-    # NLU语义解析：本地Ollama / 云端通义千问
-    LLM_MODEL: str = "qwen2.5-7b-instruct"
+    # LLM配置 - 全部使用智谱GLM（技术文档 §3.1.3）
+    # 智谱AI开放平台：https://open.bigmodel.cn/
+    LLM_MODEL: str = "glm-4-flash"  # NLU语义解析模型
     LLM_API_KEY: str = ""
-    LLM_BASE_URL: str = "http://localhost:11434"  # Ollama本地服务
+    LLM_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
 
-    # Agent LLM 配置 - 国产模型双路由（技术文档 §3.1.3）
-    # 支持：alibaba(通义千问) / zhipu(智谱GLM) / local(本地Ollama)
-    AGENT_LLM_PROVIDER: str = "alibaba"  # alibaba / zhipu / local
+    # Agent LLM 配置 - 智谱GLM
+    AGENT_LLM_PROVIDER: str = "zhipu"  # zhipu
+    AGENT_LLM_FAST_MODEL: str = "glm-4-flash"    # 快速模型，目标延迟 < 500ms
+    AGENT_LLM_STRONG_MODEL: str = "glm-4-plus"   # 强力模型，目标延迟 < 1500ms
     
-    # 通义千问配置（阿里云百炼平台）
-    ALIBABA_API_KEY: str = ""  # 通义千问API密钥
-    ALIBABA_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    ALIBABA_FAST_MODEL: str = "qwen-turbo"       # 快速模型，目标延迟 < 500ms
-    ALIBABA_STRONG_MODEL: str = "qwen-plus"      # 强力模型，目标延迟 < 1500ms
-    
-    # 智谱GLM配置（智谱AI开放平台）
+    # 智谱GLM配置
     ZHIPU_API_KEY: str = ""  # 智谱API密钥
     ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
     ZHIPU_FAST_MODEL: str = "glm-4-flash"        # 快速模型
     ZHIPU_STRONG_MODEL: str = "glm-4-plus"       # 强力模型
-    
-    # 本地模型配置（Ollama）
-    AGENT_LLM_LOCAL_MODEL: str = "qwen2.5-7b-instruct"  # 本地隐私敏感场景
 
     # 意图关联判断阈值（技术文档 §3.2.1）
     INTENT_EMBEDDING_SIMILARITY_THRESHOLD: float = 0.82

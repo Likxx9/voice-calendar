@@ -1,7 +1,7 @@
 """
 Search Service — 联网搜索工具（技术文档 §4）
 
-支持 Tavily API（推荐）、SerpAPI、Bing Search API 三种搜索引擎，
+支持智谱GLM联网搜索（推荐）、Tavily API、SerpAPI、Bing Search API，
 主/备自动切换，搜索结果缓存 6h。
 """
 import time
@@ -30,19 +30,70 @@ class SearchService:
 
         provider = settings.SEARCH_PROVIDER
         try:
-            if provider == "tavily" and settings.TAVILY_API_KEY:
+            if provider == "zhipu" and settings.ZHIPU_API_KEY:
+                result = await self._search_zhipu(query, max_results)
+            elif provider == "tavily" and settings.TAVILY_API_KEY:
                 result = await self._search_tavily(query, max_results)
             elif provider == "serpapi" and settings.SERPAPI_API_KEY:
                 result = await self._search_serpapi(query, max_results)
             elif provider == "bing" and settings.BING_SEARCH_API_KEY:
                 result = await self._search_bing(query, max_results)
             else:
-                result = self._mock_search(query, max_results)
-        except Exception:
+                result = await self._search_zhipu(query, max_results)
+        except Exception as e:
+            print(f"Search error: {e}")
             result = self._mock_search(query, max_results)
 
         self._cache[cache_key] = {"ts": time.time(), "data": result}
         return result
+
+    async def _search_zhipu(self, query: str, max_results: int) -> Dict[str, Any]:
+        """使用智谱GLM联网搜索"""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{settings.ZHIPU_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.ZHIPU_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "glm-4-flash",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": f"你是一个联网搜索助手。请根据用户的问题进行联网搜索，并返回搜索结果。返回JSON格式：{{\"answer\": \"总结答案\", \"results\": [{{\"title\": \"标题\", \"content\": \"内容\", \"url\": \"链接\"}}]}}"
+                        },
+                        {"role": "user", "content": query}
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 1024,
+                    "search_params": {
+                        "search_web": True
+                    }
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            
+            content = data["choices"][0]["message"]["content"]
+            
+            # 尝试解析JSON
+            try:
+                parsed = json.loads(content)
+                results = parsed.get("results", [])[:max_results]
+                return {
+                    "query": query,
+                    "answer": parsed.get("answer", content),
+                    "results": results,
+                    "provider": "zhipu",
+                }
+            except json.JSONDecodeError:
+                return {
+                    "query": query,
+                    "answer": content,
+                    "results": [],
+                    "provider": "zhipu",
+                }
 
     async def _search_tavily(self, query: str, max_results: int) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -139,7 +190,7 @@ class SearchService:
             "results": [
                 {
                     "title": f"{query} - 搜索结果",
-                    "content": f"这是关于 {query} 的模拟搜索结果。请配置 TAVILY_API_KEY 以启用真实联网搜索。",
+                    "content": f"这是关于 {query} 的模拟搜索结果。请配置 ZHIPU_API_KEY 以启用智谱联网搜索。",
                     "url": "",
                     "score": 0.9,
                 }
