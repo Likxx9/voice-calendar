@@ -12,7 +12,7 @@
         <p class="search-card__query">“{{ query }}”</p>
       </div>
       <span v-if="status === 'results'" class="search-card__badge">
-        查到 {{ events.length }} 个活动
+        {{ resultCountDisplay || `查到 ${events.length} 个活动` }}
       </span>
     </div>
 
@@ -71,7 +71,7 @@
           <div class="event-item__meta-grid">
             <div class="meta-item">
               <span class="meta-icon">📅</span>
-              <span class="meta-text">{{ formatDateTime(event.start_time) }} 至 {{ formatDateTime(event.end_time) }}</span>
+              <span class="meta-text">{{ (event as any).start_time_display || event.start_time }} 至 {{ (event as any).end_time_display || event.end_time }}</span>
             </div>
             <div class="meta-item">
               <span class="meta-icon">📍</span>
@@ -107,6 +107,14 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 联网搜索结果卡片 — 纯展示组件
+ *
+ * 所有数据由后端 ready-to-display 下发：
+ *   - events 中每个事件含 start_time_display / end_time_display（后端已格式化）
+ *   - resultCountDisplay: 后端提供的结果数量描述文本
+ * 前端不做任何时间格式化或数据分析。
+ */
 import { ref } from 'vue'
 import type { WebSearchEvent } from '@/types/contracts'
 
@@ -114,9 +122,11 @@ const props = withDefaults(defineProps<{
   query: string
   status?: 'searching' | 'parsing' | 'results'
   events?: WebSearchEvent[]
+  resultCountDisplay?: string
 }>(), {
   status: 'searching',
-  events: () => []
+  events: () => [],
+  resultCountDisplay: '',
 })
 
 const emit = defineEmits<{
@@ -124,7 +134,7 @@ const emit = defineEmits<{
   'retry': []
 }>()
 
-// 追踪已添加的日程标题列表
+// 追踪已添加的日程标题列表（纯 UI 状态，不含分析逻辑）
 const addedTitles = ref<string[]>([])
 
 function isEventAdded(title: string): boolean {
@@ -135,23 +145,6 @@ function handleAddEvent(event: WebSearchEvent) {
   if (isEventAdded(event.title)) return
   addedTitles.value.push(event.title)
   emit('add-event', event)
-}
-
-function formatDateTime(isoStr: string): string {
-  try {
-    const d = new Date(isoStr)
-    if (isNaN(d.getTime())) return isoStr
-    
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const hours = String(d.getHours()).padStart(2, '0')
-    const minutes = String(d.getMinutes()).padStart(2, '0')
-    
-    return `${year}年${month}月${day}日 ${hours}:${minutes}`
-  } catch {
-    return isoStr
-  }
 }
 </script>
 

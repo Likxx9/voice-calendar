@@ -158,36 +158,6 @@ export interface WebSearchResponse {
 }
 
 // ────────────────────────────────────────────────────────────
-// M6: 离线同步有效载荷
-// ────────────────────────────────────────────────────────────
-export interface OfflineOperation {
-  operation_id: string
-  entity_type: 'event' | 'task'
-  action: 'create' | 'update' | 'delete'
-  entity_id: string
-  payload: Record<string, unknown>
-  original_version_tag: string
-  executed_at: string
-}
-
-export interface SyncPayload {
-  user_id: string
-  client_timestamp: string
-  offline_operations: OfflineOperation[]
-}
-
-export interface SyncResult {
-  status: 'success' | 'partial_conflict'
-  merged_count: number
-  conflicts: Array<{
-    operation_id: string
-    server_value: Record<string, unknown>
-    client_value: Record<string, unknown>
-    field: string
-  }>
-}
-
-// ────────────────────────────────────────────────────────────
 // WebSocket 消息帧类型
 // ────────────────────────────────────────────────────────────
 export type WSFrameType =
@@ -207,6 +177,7 @@ export type WSFrameType =
   | 'TTS_DONE'                // M2→M1 TTS 播报完毕
   | 'VAD_TIMEOUT_ADJUST'      // M2→M1 VAD 断句调控
   | 'WS_INTENT_INTERRUPT'     // M1→M2 Barge-in 打断
+  | 'SEARCH_ADD_EVENT'        // M1→M2 将搜索结果加入日历（后端处理）
   | 'SYNC_STATUS'             // M6→M1 同步状态
   | 'HEARTBEAT'               // 心跳
 
@@ -236,12 +207,6 @@ export type ConnectionState =
   | 'connecting'
   | 'reconnecting'
   | 'disconnected'
-
-export type SyncState =
-  | 'online'
-  | 'offline'
-  | 'syncing'
-  | 'sync_error'
 
 export type LayoutMode = 'default' | 'eyes-free'
 export type ThemeMode = 'dark' | 'light' | 'system'

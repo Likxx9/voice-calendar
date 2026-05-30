@@ -5,7 +5,7 @@
       <h3 class="conflict-card__title">检测到时间冲突</h3>
     </div>
 
-    <!-- 冲突列表 -->
+    <!-- 冲突列表（后端已提供 display-ready 数据） -->
     <div class="conflict-card__conflicts">
       <div
         v-for="conflict in conflicts"
@@ -14,12 +14,12 @@
       >
         <div class="conflict-card__item-header">
           <span class="conflict-card__severity" :class="`conflict-card__severity--${conflict.severity}`">
-            {{ conflict.severity === 'full' ? '完全重叠' : '部分重叠' }}
+            {{ conflict.severity_label || (conflict.severity === 'full' ? '完全重叠' : '部分重叠') }}
           </span>
         </div>
         <p class="conflict-card__item-title">{{ conflict.existing_title }}</p>
         <p class="conflict-card__item-time">
-          {{ formatTime(conflict.overlap_start) }} — {{ formatTime(conflict.overlap_end) }}
+          {{ conflict.overlap_start_display || conflict.overlap_start }} — {{ conflict.overlap_end_display || conflict.overlap_end }}
         </p>
       </div>
     </div>
@@ -52,6 +52,14 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 冲突协商卡片 — 纯展示组件
+ *
+ * 所有数据由后端 ready-to-display 下发：
+ *   - conflicts: 包含 severity_label, overlap_start_display, overlap_end_display
+ *   - suggestions: 由后端构建的建议列表
+ * 前端不做任何时间格式化或默认值填充。
+ */
 import type { ConflictItem } from '@/types/contracts'
 
 withDefaults(defineProps<{
@@ -59,7 +67,7 @@ withDefaults(defineProps<{
   suggestions?: string[]
 }>(), {
   conflicts: () => [],
-  suggestions: () => ['改到下午3:30', '改到明天同一时间'],
+  suggestions: () => [],
 })
 
 defineEmits<{
@@ -68,16 +76,6 @@ defineEmits<{
   'force-create': []
   'cancel': []
 }>()
-
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString('zh-CN', {
-      hour: '2-digit', minute: '2-digit'
-    })
-  } catch {
-    return iso
-  }
-}
 </script>
 
 <style scoped>

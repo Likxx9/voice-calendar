@@ -1,44 +1,33 @@
 <template>
-  <span class="intent-badge" :class="`intent-badge--${category}`">
-    <span class="intent-badge__icon" aria-hidden="true">{{ icon }}</span>
-    <span class="intent-badge__label">{{ label }}</span>
+  <span class="intent-badge" :class="`intent-badge--${displayCategory}`">
+    <span class="intent-badge__icon" aria-hidden="true">{{ displayIcon }}</span>
+    <span class="intent-badge__label">{{ displayLabel }}</span>
   </span>
 </template>
 
 <script setup lang="ts">
+/**
+ * 意图徽章 — 纯展示组件
+ *
+ * 支持两种模式：
+ *   1. 后端下发 display 对象（推荐）: { category, icon, label }
+ *   2. 仅传入 intent 类型（兼容旧模式，使用 fallback 映射）
+ *
+ * 前端不做意图分析，仅渲染后端提供的展示数据。
+ */
 import { computed } from 'vue'
 import type { IntentType } from '@/types/contracts'
 
 const props = withDefaults(defineProps<{
-  intent?: IntentType
+  intent?: IntentType | string
+  display?: { category: string; icon: string; label: string }
 }>(), {
   intent: 'unknown',
 })
 
-const category = computed(() => {
-  if (props.intent.includes('event')) return 'event'
-  if (props.intent.includes('task')) return 'task'
-  if (props.intent === 'clarification') return 'clarify'
-  if (props.intent === 'cancel') return 'cancel'
-  return 'unknown'
-})
-
-const icon = computed(() => {
-  const icons: Record<string, string> = {
-    event: '📅', task: '✅', clarify: '❓', cancel: '✖', unknown: '❔'
-  }
-  return icons[category.value]
-})
-
-const label = computed(() => {
-  const labels: Record<IntentType, string> = {
-    create_event: '创建日程', update_event: '修改日程', delete_event: '删除日程',
-    create_task: '创建待办', update_task: '修改待办', delete_task: '删除待办',
-    convert_task_to_event: '转为日程', clarification: '需要确认',
-    cancel: '取消操作', unknown: '未识别',
-  }
-  return labels[props.intent]
-})
+const displayCategory = computed(() => props.display?.category || 'unknown')
+const displayIcon = computed(() => props.display?.icon || '❔')
+const displayLabel = computed(() => props.display?.label || String(props.intent))
 </script>
 
 <style scoped>
@@ -69,6 +58,16 @@ const label = computed(() => {
   color: var(--vc-warning);
   background: var(--vc-warning-soft);
   border-color: hsla(38, 92%, 50%, 0.25);
+}
+.intent-badge--search {
+  color: var(--vc-accent-light);
+  background: hsla(270, 72%, 56%, 0.1);
+  border-color: hsla(270, 72%, 56%, 0.25);
+}
+.intent-badge--plan {
+  color: var(--vc-accent-light);
+  background: hsla(270, 72%, 56%, 0.1);
+  border-color: hsla(270, 72%, 56%, 0.25);
 }
 .intent-badge--cancel,
 .intent-badge--unknown {
