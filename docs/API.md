@@ -234,7 +234,7 @@
 ### 4.1 连接信息
 
 ```
-ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
+ws://localhost:8000/api/v1/voice/stream?session_id={session_id}&user_id={user_id}
 ```
 
 **查询参数**:
@@ -260,7 +260,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "audio_chunk",
+    "type": "AUDIO_CHUNK",
     "sessionId": "session_123",
     "data": [0.1, 0.2, 0.3, ...],
     "sequence": 1,
@@ -272,7 +272,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "text_input",
+    "type": "TEXT_INPUT",
     "sessionId": "session_123",
     "text": "提醒我明天下午三点开会"
 }
@@ -282,7 +282,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "interrupt",
+    "type": "WS_INTENT_INTERRUPT",
     "sessionId": "session_123"
 }
 ```
@@ -311,7 +311,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "transcription",
+    "type": "TRANSCRIPT_FINAL",
     "sessionId": "session_123",
     "text": "提醒我明天下午三点开会",
     "confidence": 0.95,
@@ -323,7 +323,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "semantic_output",
+    "type": "SEMANTIC_RESULT",
     "sessionId": "session_123",
     "intent": "create_event",
     "entities": {
@@ -340,7 +340,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "clarification",
+    "type": "CLARIFICATION_ASK",
     "sessionId": "session_123",
     "missing_fields": ["开始时间"],
     "message": "请问什么时候开会？"
@@ -351,7 +351,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "conflict_detected",
+    "type": "CONFLICT_ALERT",
     "sessionId": "session_123",
     "conflicts": [
         {
@@ -373,7 +373,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "event_created",
+    "type": "ACTION_RESULT",
     "sessionId": "session_123",
     "event": {
         "id": "evt_123",
@@ -389,7 +389,7 @@ ws://localhost:8000/ws/voice?session_id={session_id}&user_id={user_id}
 
 ```json
 {
-    "type": "tts",
+    "type": "PLAYBACK_CONTROL",
     "sessionId": "session_123",
     "text": "好的，已为您创建开会，时间是明天下午三点"
 }
@@ -546,7 +546,7 @@ const response = await fetch('/api/calendar/events', {
 ### 9.2 WebSocket连接
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/ws/voice?session_id=xxx');
+const ws = new WebSocket('ws://localhost:8000/api/v1/voice/stream?session_id=xxx');
 
 ws.onopen = () => {
     console.log('Connected');
@@ -558,7 +558,7 @@ ws.onmessage = (event) => {
 };
 
 ws.send(JSON.stringify({
-    type: 'text_input',
+    type: 'TEXT_INPUT',
     text: '提醒我明天开会'
 }));
 ```

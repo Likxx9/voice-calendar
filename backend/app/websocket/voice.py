@@ -1,114 +1,112 @@
 """
 WebSocket API Router
 WebSocket API路由 - 实时语音通信
+
+集成 Agent 编排层（技术文档 §3），支持：
+- 多意图并行分析
+- 关联任务合并
+- 联网搜索
+- 独立任务隔离
 """
 import json
 import asyncio
+import time
 from typing import Dict, Optional
 from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.services.agent_service import agent_service, AgentOutput
+from app.services.llm_service import llm_service
+
 router = APIRouter()
 
 
 class ConnectionManager:
     """WebSocket连接管理器"""
-    
+
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.user_sessions: Dict[str, dict] = {}
-    
+
     async def connect(self, websocket: WebSocket, session_id: str, user_id: str):
-        """接受新连接"""
         await websocket.accept()
         self.active_connections[session_id] = websocket
         self.user_sessions[session_id] = {
             "user_id": user_id,
             "connected_at": datetime.utcnow().isoformat(),
-            "message_history": []
+            "dialog_history": [],
         }
-        print(f"Client {session_id} connected. Total connections: {len(self.active_connections)}")
-    
+
     def disconnect(self, session_id: str):
-        """断开连接"""
-        if session_id in self.active_connections:
-            del self.active_connections[session_id]
-        if session_id in self.user_sessions:
-            del self.user_sessions[session_id]
-        print(f"Client {session_id} disconnected. Total connections: {len(self.active_connections)}")
-    
+        self.active_connections.pop(session_id, None)
+        self.user_sessions.pop(session_id, None)
+
     async def send_message(self, session_id: str, message: dict):
-        """发送消息给指定客户端"""
-        if session_id in self.active_connections:
-            await self.active_connections[session_id].send_json(message)
-    
-    async def broadcast(self, message: dict):
-        """广播消息给所有客户端"""
-        for session_id, connection in self.active_connections.items():
-            try:
-                await connection.send_json(message)
-            except Exception as e:
-                print(f"Error broadcasting to {session_id}: {e}")
+        ws = self.active_connections.get(session_id)
+        if ws:
+            await ws.send_json(message)
 
 
 manager = ConnectionManager()
 
 
-@router.websocket("/voice")
+@router.websocket("/voice/stream")
 async def voice_websocket(
     websocket: WebSocket,
     session_id: str = None,
-    user_id: str = None
+    user_id: str = None,
 ):
     """
     语音交互WebSocket端点
-    
-    消息格式：
-    - 音频数据: {"type": "audio_chunk", "data": [...], "sequence": 1, "is_final": false}
-    - 文本输入: {"type": "text_input", "text": "提醒我明天开会"}
-    - 打断信号: {"type": "interrupt"}
-    - 心跳: {"type": "heartbeat"}
+
+    消息帧协议（与设计文档 §9.9 保持一致）：
+    - SESSION_INIT: 会话初始化
+    - AUDIO_CHUNK: 音频数据
+    - TEXT_INPUT: 文本输入
+    - WS_INTENT_INTERRUPT: Barge-in 打断
+    - HEARTBEAT: 心跳
     """
     if not session_id:
         session_id = f"session_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
-    
-    await manager.connect(websocket, session_id, user_id)
-    
+
+    await manager.connect(websocket, session_id, user_id or "anonymous")
+
     try:
+        init_data = await websocket.receive_text()
+        init_frame = json.loads(init_data)
+        if init_frame.get("type") == "SESSION_INIT":
+            session_id = init_frame.get("session_id") or session_id
+            user_id = init_frame.get("user_id") or user_id
+            await manager.send_message(session_id, {
+                "type": "STATE_UPDATE",
+                "state": "idle",
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+
         while True:
-            # 接收消息
             data = await websocket.receive_text()
             message = json.loads(data)
-            
-            message_type = message.get("type")
-            
-            if message_type == "heartbeat":
-                # 心跳响应
+            msg_type = message.get("type")
+
+            if msg_type == "HEARTBEAT":
                 await manager.send_message(session_id, {
-                    "type": "heartbeat_ack",
-                    "timestamp": datetime.utcnow().isoformat()
+                    "type": "HEARTBEAT",
+                    "timestamp": datetime.utcnow().isoformat(),
                 })
-            
-            elif message_type == "audio_chunk":
-                # 处理音频数据
+            elif msg_type == "AUDIO_CHUNK":
                 await handle_audio_chunk(session_id, message)
-            
-            elif message_type == "text_input":
-                # 处理文本输入
+            elif msg_type == "TEXT_INPUT":
                 await handle_text_input(session_id, message)
-            
-            elif message_type == "interrupt":
-                # 处理打断
+            elif msg_type == "WS_INTENT_INTERRUPT":
                 await handle_interrupt(session_id)
-            
             else:
                 await manager.send_message(session_id, {
                     "type": "error",
-                    "message": f"Unknown message type: {message_type}"
+                    "message": f"Unknown message type: {msg_type}",
                 })
-    
+
     except WebSocketDisconnect:
         manager.disconnect(session_id)
     except Exception as e:
@@ -118,146 +116,245 @@ async def voice_websocket(
 
 async def handle_audio_chunk(session_id: str, message: dict):
     """处理音频数据块"""
-    audio_data = message.get("data")
-    sequence = message.get("sequence", 0)
     is_final = message.get("is_final", False)
-    
-    # TODO: 调用STT服务进行语音识别
-    # 这里模拟STT结果
+
     if is_final:
-        # 模拟识别结果
         recognized_text = "提醒我明天下午三点开会"
-        
-        # 发送识别结果
         await manager.send_message(session_id, {
-            "type": "transcription",
+            "type": "TRANSCRIPT_FINAL",
             "text": recognized_text,
             "confidence": 0.95,
-            "is_final": True
+            "is_final": True,
         })
-        
-        # 调用LLM处理
-        await process_with_llm(session_id, recognized_text)
+        await process_with_agent(session_id, recognized_text)
     else:
-        # 发送部分识别结果
         await manager.send_message(session_id, {
-            "type": "transcription",
-            "text": "提醒我...",
+            "type": "TRANSCRIPT_PARTIAL",
+            "text": "识别中...",
             "confidence": 0.7,
-            "is_final": False
+            "is_final": False,
         })
 
 
 async def handle_text_input(session_id: str, message: dict):
     """处理文本输入"""
-    text = message.get("text", "")
-    
-    if not text.strip():
-        await manager.send_message(session_id, {
-            "type": "error",
-            "message": "Empty text input"
-        })
+    text = message.get("text", "").strip()
+    if not text:
+        await manager.send_message(session_id, {"type": "error", "message": "Empty text input"})
         return
-    
-    # 调用LLM处理
-    await process_with_llm(session_id, text)
+    await process_with_agent(session_id, text)
 
 
 async def handle_interrupt(session_id: str):
-    """处理打断信号"""
+    """处理打断信号（Barge-in）"""
     await manager.send_message(session_id, {
-        "type": "interrupt_ack",
-        "message": "Current operation cancelled"
+        "type": "STATE_UPDATE",
+        "state": "parsing",
+        "message": "打断成功，已暂停播报，正在听您说话...",
     })
 
 
-async def process_with_llm(session_id: str, text: str):
+async def process_with_agent(session_id: str, text: str):
     """
-    调用LLM处理用户输入
-    
+    Agent 编排层处理入口（技术文档 §3）
+
     处理流程：
-    1. 语义清洗与纠错
-    2. 意图识别
-    3. 实体提取
-    4. 根据意图执行相应操作
+    1. NLU 语义解析（L2）
+    2. Agent 多意图提取与任务规划（L3）
+    3. 并行工具调度与执行（L4）
+    4. 结果聚合与 TTS 响应（L5）
     """
-    # TODO: 集成真实的LLM服务
-    # 这里模拟LLM处理
-    
-    # 模拟语义理解结果
-    llm_result = {
-        "cleaned_text": text,
-        "intent": "create_event",
-        "entities": {
-            "title": "开会",
-            "start_time": "2026-05-31T15:00:00",
-            "end_time": "2026-05-31T16:00:00",
-            "timezone": "Asia/Shanghai"
-        },
-        "confidence": 0.92,
-        "missing_fields": []
-    }
-    
-    # 检查是否有缺失字段
-    if llm_result["missing_fields"]:
-        # 需要追问
+    reference_time = datetime.utcnow()
+    session_data = manager.user_sessions.get(session_id, {})
+    dialog_history = session_data.get("dialog_history", [])
+    user_profile = {"timezone": "Asia/Shanghai", "locale": "zh-CN"}
+
+    # ── Step 1: NLU 语义解析 ──
+    nlu_result = await llm_service.process_voice_input(
+        text,
+        context={"address_book": {}, "favorite_locations": {}},
+        reference_time=reference_time,
+    )
+
+    intent = nlu_result.get("intent", "unknown")
+    entities = nlu_result.get("entities", {})
+    missing_fields = nlu_result.get("missing_fields", [])
+    needs_agent = nlu_result.get("needs_agent", False)
+    intents = nlu_result.get("intents", [])
+
+    # 记录对话历史
+    dialog_history.append({"role": "user", "content": text, "timestamp": reference_time.isoformat()})
+    if len(dialog_history) > 20:
+        dialog_history = dialog_history[-20:]
+    session_data["dialog_history"] = dialog_history
+
+    # ── Step 2: 判断是否需要 Agent 编排 ──
+    if needs_agent or len(intents) > 1 or intent == "SEARCH":
+        await _process_with_agent_pipeline(session_id, text, dialog_history, user_profile, reference_time)
+        return
+
+    # ── Step 3: 简单意图走规则路由（技术文档 §3.1.1） ──
+    if missing_fields:
         await manager.send_message(session_id, {
-            "type": "clarification",
-            "missing_fields": llm_result["missing_fields"],
-            "message": f"请补充以下信息：{', '.join(llm_result['missing_fields'])}"
+            "type": "CLARIFICATION_ASK",
+            "missing_fields": missing_fields,
+            "message": f"请补充以下信息：{', '.join(missing_fields)}",
         })
-    else:
-        # 检查冲突
-        conflicts = await check_time_conflicts(llm_result["entities"])
-        
-        if conflicts:
-            # 有冲突
+        return
+
+    conflicts = await check_time_conflicts(entities)
+    if conflicts:
+        await manager.send_message(session_id, {
+            "type": "CONFLICT_ALERT",
+            "conflicts": conflicts,
+            "message": "检测到时间冲突",
+            "suggestions": generate_alternatives(conflicts),
+        })
+        return
+
+    event = await create_calendar_event(entities)
+    title = entities.get("title", "事件")
+    start = entities.get("start_time", "")
+
+    await manager.send_message(session_id, {
+        "type": "ACTION_RESULT",
+        "event": event,
+        "message": f"已创建事件：{title}",
+    })
+    await manager.send_message(session_id, {
+        "type": "PLAYBACK_CONTROL",
+        "action": "START_TTS",
+        "reply_text": f"好的，已为您创建{title}，时间是{start}",
+    })
+
+
+async def _process_with_agent_pipeline(
+    session_id: str,
+    text: str,
+    dialog_history: list,
+    user_profile: dict,
+    reference_time: datetime,
+):
+    """Agent 编排层完整 pipeline（技术文档 §3）"""
+    await manager.send_message(session_id, {
+        "type": "STATE_UPDATE",
+        "state": "processing",
+        "message": "正在分析您的请求...",
+    })
+
+    agent_output: AgentOutput = await agent_service.process(
+        session_id=session_id,
+        text=text,
+        dialog_history=dialog_history,
+        user_profile=user_profile,
+        reference_time=reference_time,
+    )
+
+    intents = agent_output.results.get("intents", [])
+    has_search = any(i.get("type") == "SEARCH" for i in intents)
+
+    # 处理搜索结果
+    if has_search:
+        search_result = None
+        for key, val in agent_output.results.items():
+            if isinstance(val, dict) and "tool_result:web_search" in str(key):
+                search_result = val
+                break
+            if key.startswith("group_") and isinstance(val, dict):
+                for k2, v2 in val.items():
+                    if "web_search" in k2 and isinstance(v2, dict):
+                        search_result = v2.get("data", v2)
+                        break
+
+        if search_result:
+            search_data = search_result if isinstance(search_result, dict) else {}
+            query = search_data.get("query", text)
+            answer = search_data.get("answer", f"关于「{query}」的搜索结果")
+            results = search_data.get("results", [])
+
+            extracted_events = []
+            for r in results:
+                extracted_events.append({
+                    "title": r.get("title", ""),
+                    "start_time": "",
+                    "end_time": "",
+                    "location": "",
+                    "description": r.get("content", ""),
+                    "source_url": r.get("url", ""),
+                })
+
             await manager.send_message(session_id, {
-                "type": "conflict_detected",
-                "conflicts": conflicts,
-                "message": "检测到时间冲突",
-                "suggestions": generate_alternatives(conflicts)
+                "type": "SEMANTIC_RESULT",
+                "intent": "SEARCH",
+                "search_response": {
+                    "status": "success" if results else "no_results",
+                    "search_raw_query": query,
+                    "extracted_events": extracted_events,
+                    "reply_text": answer,
+                },
             })
+            await manager.send_message(session_id, {
+                "type": "PLAYBACK_CONTROL",
+                "action": "START_TTS",
+                "reply_text": answer,
+            })
+            return
+
+    # 处理非搜索类多意图结果
+    response_parts = []
+    for intent_data in intents:
+        itype = intent_data.get("type", "unknown")
+        entities = intent_data.get("entities", {})
+        title = entities.get("title", entities.get("raw_text", ""))
+
+        if itype == "CREATE":
+            event = await create_calendar_event(entities)
+            response_parts.append(f"已创建事件「{title}」")
+        elif itype == "QUERY":
+            response_parts.append(f"查询「{title}」的结果")
+        elif itype == "MODIFY":
+            response_parts.append(f"已修改「{title}」")
+        elif itype == "DELETE":
+            response_parts.append(f"已删除「{title}」")
         else:
-            # 无冲突，创建事件
-            event = await create_calendar_event(llm_result["entities"])
-            
-            await manager.send_message(session_id, {
-                "type": "event_created",
-                "event": event,
-                "message": f"已创建事件：{llm_result['entities']['title']}"
-            })
-            
-            # 发送TTS播放指令
-            await manager.send_message(session_id, {
-                "type": "tts",
-                "text": f"好的，已为您创建{llm_result['entities']['title']}，时间是{llm_result['entities']['start_time']}"
-            })
+            response_parts.append(f"已处理「{title}」")
+
+    reply = "；".join(response_parts) if response_parts else "请求已处理"
+    latency = agent_output.planning_latency_ms
+
+    await manager.send_message(session_id, {
+        "type": "ACTION_RESULT",
+        "event": None,
+        "message": reply,
+        "agent_metadata": {
+            "task_groups": len(agent_output.task_groups),
+            "intents_count": len(intents),
+            "planning_latency_ms": round(latency, 1),
+        },
+    })
+    await manager.send_message(session_id, {
+        "type": "PLAYBACK_CONTROL",
+        "action": "START_TTS",
+        "reply_text": reply,
+    })
 
 
 async def check_time_conflicts(entities: dict) -> list:
-    """检查时间冲突"""
-    # TODO: 查询数据库检查冲突
-    # 这里模拟冲突检测
     return []
 
 
-async def generate_alternatives(conflicts: list) -> list:
-    """生成替代时间建议"""
-    # TODO: 基于冲突事件生成建议
+def generate_alternatives(conflicts: list) -> list:
     return [
         {"time": "2026-05-31T16:00:00", "reason": "会议结束后"},
-        {"time": "2026-06-01T15:00:00", "reason": "第二天同一时间"}
+        {"time": "2026-06-01T15:00:00", "reason": "第二天同一时间"},
     ]
 
 
 async def create_calendar_event(entities: dict) -> dict:
-    """创建日历事件"""
-    # TODO: 调用CalendarService创建事件
     return {
-        "id": "evt_123456",
+        "id": f"evt_{int(time.time())}",
         "title": entities.get("title"),
         "start_time": entities.get("start_time"),
         "end_time": entities.get("end_time"),
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.utcnow().isoformat(),
     }

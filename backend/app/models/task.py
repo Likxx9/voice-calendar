@@ -35,6 +35,9 @@ class TodoTask(Base):
     is_completed = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
+    # 离线同步版本控制（设计文档 §2.12）
+    version_tag = Column(String(100), default=lambda: str(uuid.uuid4()), nullable=False)
+    
     # 时间戳
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -58,5 +61,6 @@ class TodoTask(Base):
             "priority": self.priority,
             "is_completed": self.is_completed,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "version_tag": self.version_tag,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

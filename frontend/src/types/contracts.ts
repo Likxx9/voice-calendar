@@ -89,6 +89,48 @@ export interface ConflictResult {
 }
 
 // ────────────────────────────────────────────────────────────
+// Agent 编排层数据契约（技术文档 §5）
+// ────────────────────────────────────────────────────────────
+export type AgentIntentType = 'CREATE' | 'QUERY' | 'MODIFY' | 'DELETE' | 'SEARCH' | 'PLAN'
+
+export interface AgentIntent {
+  id: string
+  type: AgentIntentType
+  entities: Record<string, unknown>
+  confidence: number                 // 0~1
+  raw_span?: [number, number]        // 原文字符区间
+}
+
+export interface ExecutionStep {
+  step_index: number
+  tool_calls: string[]
+  parallel: boolean
+  depends_on: number[]               // 依赖的前置步骤索引
+}
+
+export interface AgentTaskGroup {
+  id: string
+  intents: string[]                  // intent id 列表
+  related: boolean
+  tools_needed: string[]
+  execution_plan: ExecutionStep[]
+}
+
+export interface AgentOutput {
+  session_id: string
+  task_groups: AgentTaskGroup[]
+  results: Record<string, unknown>
+  fallback_response?: string         // LLM 规划失败时的文本兜底
+  planning_latency_ms: number
+}
+
+export interface AgentMetadata {
+  task_groups: number
+  intents_count: number
+  planning_latency_ms: number
+}
+
+// ────────────────────────────────────────────────────────────
 // M9: 联网检索数据契约
 // ────────────────────────────────────────────────────────────
 export interface WebSearchRequest {
@@ -149,13 +191,18 @@ export interface SyncResult {
 // WebSocket 消息帧类型
 // ────────────────────────────────────────────────────────────
 export type WSFrameType =
+  | 'SESSION_INIT'            // M1→M2 会话初始化
   | 'AUDIO_CHUNK'             // M1→M2 音频分片
+  | 'TEXT_INPUT'              // M1→M2 文本输入
   | 'TRANSCRIPT_PARTIAL'      // M2→M1 局部转写
   | 'TRANSCRIPT_FINAL'        // M2→M1 最终转写
-  | 'SEMANTIC_RESULT'         // M3→M1 语义结果
+  | 'SEMANTIC_RESULT'         // M3→M1 语义结果（含 Agent 多意图/搜索结果）
+  | 'AGENT_PLAN'              // L3→M1 Agent 任务规划结果
   | 'CLARIFICATION_ASK'       // M4→M1 追问请求
   | 'CONFLICT_ALERT'          // M4→M1 冲突通知
-  | 'ACTION_RESULT'           // M4→M1 执行结果
+  | 'ACTION_RESULT'           // M4→M1 执行结果（含 agent_metadata）
+  | 'PLAYBACK_CONTROL'        // M4→M1 播放控制
+  | 'STATE_UPDATE'            // M2→M1 状态更新
   | 'TTS_AUDIO_CHUNK'         // M2→M1 TTS 音频分片
   | 'TTS_DONE'                // M2→M1 TTS 播报完毕
   | 'VAD_TIMEOUT_ADJUST'      // M2→M1 VAD 断句调控

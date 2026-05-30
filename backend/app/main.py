@@ -20,13 +20,16 @@ async def lifespan(app: FastAPI):
     print("Voice Calendar Backend Starting...")
     print(f"Database: {settings.DATABASE_URL}")
     print(f"Redis: {settings.REDIS_URL}")
-    
+    print(f"Agent LLM Provider: {settings.AGENT_LLM_PROVIDER}")
+    print(f"Agent LLM Models: {settings.AGENT_LLM_FAST_MODEL} / {settings.AGENT_LLM_STRONG_MODEL}")
+    print(f"Search Provider: {settings.SEARCH_PROVIDER}")
+
     # 创建数据库表
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield
-    
+
     # 关闭时
     print("Voice Calendar Backend Shutting Down...")
 
@@ -50,7 +53,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"])
-app.include_router(websocket.router, prefix="/ws", tags=["websocket"])
+app.include_router(websocket.router, prefix="/api/v1", tags=["websocket"])
 
 
 @app.get("/")

@@ -33,6 +33,12 @@ class CalendarEvent(Base):
     # 参与者
     participants = Column(Text, nullable=True)  # JSON数组
     
+    # 多日历管理（设计文档 §2.7）
+    calendar_id = Column(String(36), default="default", nullable=False)  # 目标日历ID
+    
+    # 离线同步版本控制（设计文档 §2.12）
+    version_tag = Column(String(100), default=lambda: str(uuid.uuid4()), nullable=False)
+    
     # 元数据
     is_all_day = Column(Boolean, default=False)
     color = Column(String(20), nullable=True)  # 事件颜色
@@ -51,6 +57,7 @@ class CalendarEvent(Base):
     __table_args__ = (
         Index("idx_events_user_time", "user_id", "start_time", "end_time"),
         Index("idx_events_timezone", "timezone"),
+        Index("idx_events_calendar_id", "calendar_id"),
     )
     
     def to_dict(self):
@@ -65,6 +72,8 @@ class CalendarEvent(Base):
             "timezone": self.timezone,
             "recurrence_rule": self.recurrence_rule,
             "participants": self.participants,
+            "calendar_id": self.calendar_id,
+            "version_tag": self.version_tag,
             "is_all_day": self.is_all_day,
             "color": self.color,
             "reminder_minutes": self.reminder_minutes,

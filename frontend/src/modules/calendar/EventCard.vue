@@ -2,16 +2,26 @@
   <div class="event-card" :class="{ 'event-card--compact': compact }" :style="{ '--event-color': color }" @click="$emit('click')">
     <div class="event-card__color-bar" aria-hidden="true" />
     <div class="event-card__body">
-      <h4 class="event-card__title">{{ title }}</h4>
-      <div class="event-card__meta">
-        <span class="event-card__time">🕐 {{ formattedTime }}</span>
-        <span v-if="location" class="event-card__location">📍 {{ location }}</span>
+      <div class="event-card__header">
+        <h4 class="event-card__title">{{ title }}</h4>
+        <span v-if="hasReminder" class="event-card__reminder-icon" title="已设置独立提醒">🔔</span>
       </div>
-      <div v-if="attendees && attendees.length > 0 && !compact" class="event-card__attendees">
-        <span v-for="(a, i) in attendees.slice(0, 3)" :key="i" class="event-card__avatar" :title="a">
-          {{ a.charAt(0).toUpperCase() }}
-        </span>
-        <span v-if="attendees.length > 3" class="event-card__more">+{{ attendees.length - 3 }}</span>
+      <div class="event-card__meta">
+        <span class="event-card__time">{{ formattedTime }}</span>
+        <span v-if="location" class="event-card__location">{{ location }}</span>
+      </div>
+      
+      <!-- 上下文增强微件 (Context Widgets) -->
+      <div v-if="commuteTime || (attendees && attendees.length > 0 && !compact)" class="event-card__widgets">
+        <div v-if="commuteTime" class="widget-commute">
+          🚗 距当前位置预估 {{ commuteTime }} 分钟
+        </div>
+        <div v-if="attendees && attendees.length > 0 && !compact" class="event-card__attendees">
+          <span v-for="(a, i) in attendees.slice(0, 3)" :key="i" class="event-card__avatar" :title="a">
+            {{ a.charAt(0).toUpperCase() }}
+          </span>
+          <span v-if="attendees.length > 3" class="event-card__more">+{{ attendees.length - 3 }}</span>
+        </div>
       </div>
     </div>
   </div>
@@ -28,6 +38,8 @@ const props = withDefaults(defineProps<{
   attendees?: string[]
   color?: string
   compact?: boolean
+  commuteTime?: number // 预估通勤时间（分钟）
+  hasReminder?: boolean // 是否有独立提醒
 }>(), {
   title: '未命名日程',
   startTime: '',
@@ -36,6 +48,8 @@ const props = withDefaults(defineProps<{
   attendees: () => [],
   color: 'var(--vc-primary)',
   compact: false,
+  commuteTime: undefined,
+  hasReminder: false,
 })
 
 defineEmits<{ click: [] }>()
@@ -55,18 +69,19 @@ const formattedTime = computed(() => {
   --event-color: var(--vc-primary);
   display: flex;
   gap: 0;
-  background: var(--vc-bg-elevated);
-  border: 1px solid var(--vc-border);
+  background: var(--vc-bg-surface);
   border-radius: var(--vc-radius-md);
   overflow: hidden;
   cursor: pointer;
   transition: all var(--vc-transition-fast);
+  z-index: var(--vc-z-card);
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .event-card:hover {
-  border-color: var(--event-color);
-  box-shadow: var(--vc-shadow-sm);
-  transform: translateY(-1px);
+  box-shadow: var(--vc-shadow-md);
+  transform: translateY(-2px);
 }
 
 .event-card__color-bar {
@@ -78,13 +93,28 @@ const formattedTime = computed(() => {
 .event-card__body {
   flex: 1;
   padding: var(--vc-space-sm) var(--vc-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .event-card__title {
   font-size: var(--vc-text-sm);
   font-weight: var(--vc-weight-semibold);
   color: var(--vc-text-primary);
-  margin-bottom: 2px;
+  margin: 0;
+  line-height: var(--vc-leading-tight);
+}
+
+.event-card__reminder-icon {
+  font-size: 12px;
+  color: var(--vc-warning);
 }
 
 .event-card__meta {
@@ -99,35 +129,51 @@ const formattedTime = computed(() => {
   color: var(--vc-text-secondary);
 }
 
+/* 增强微件样式 */
+.event-card__widgets {
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.widget-commute {
+  font-size: 11px;
+  color: var(--vc-text-secondary);
+  background-color: var(--vc-bg-base);
+  padding: 2px 6px;
+  border-radius: var(--vc-radius-sm);
+}
+
 .event-card__attendees {
   display: flex;
   align-items: center;
   gap: -4px;
-  margin-top: var(--vc-space-xs);
 }
 
 .event-card__avatar {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: var(--vc-radius-full);
-  background: var(--vc-accent);
-  color: white;
+  background: var(--vc-primary-light);
+  color: var(--vc-text-inverse);
   font-size: 10px;
   font-weight: var(--vc-weight-bold);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: -4px;
-  border: 2px solid var(--vc-bg-elevated);
+  margin-left: -6px;
+  border: 2px solid var(--vc-bg-surface);
 }
 .event-card__avatar:first-child { margin-left: 0; }
 
 .event-card__more {
-  font-size: var(--vc-text-xs);
+  font-size: 10px;
   color: var(--vc-text-tertiary);
   margin-left: var(--vc-space-xs);
 }
 
+/* 紧凑模式覆盖 */
 .event-card--compact .event-card__body {
   padding: var(--vc-space-xs) var(--vc-space-sm);
 }

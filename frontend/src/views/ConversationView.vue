@@ -21,8 +21,8 @@
       <!-- 实时追问卡片 (Clarification) -->
       <div v-if="sessionStore.voiceState === 'clarifying'" class="inline-card-container">
         <ClarificationCard
-          :message="'请问这个日程的主题是什么？比如“和产品经理对需求”'"
-          :missingFields="['title']"
+          :message="clarificationMessage"
+          :missingFields="clarificationMissingFields"
           @voice-reply="startVoiceInput"
           @skip="handleSkipClarification"
         />
@@ -31,8 +31,8 @@
       <!-- 实时时间冲突卡片 (Conflict Negotiation) -->
       <div v-if="sessionStore.voiceState === 'conflict'" class="inline-card-container">
         <ConflictNegotiation
-          :conflicts="mockConflicts"
-          :suggestions="['改期至下午 3:30', '改期至明天下午同一时间', '仍然强制创建']"
+          :conflicts="currentConflicts"
+          :suggestions="conflictSuggestions"
           @select="handleResolveConflict"
           @voice-resolve="startVoiceInput"
           @force-create="handleForceCreate"
@@ -94,7 +94,7 @@
       <div class="footer-visualizer" :class="{ 'footer-visualizer--visible': sessionStore.isRecording }">
         <WaveformVisualizer
           :isActive="sessionStore.isRecording"
-          :volume="mockVolume"
+          :volume="recorder.currentVolume.value"
           :width="300"
           :height="60"
         />
@@ -127,7 +127,7 @@
           <div class="main-mic-button">
             <VoiceButton
               :status="sessionStore.voiceState"
-              :volume="mockVolume"
+              :volume="recorder.currentVolume.value"
               @press-start="startVoiceInput"
               @press-end="stopVoiceInput"
               @tap="handleTapButton"
@@ -150,6 +150,9 @@ import { useSessionStore } from '@/stores/useSessionStore'
 import { useCalendarStore } from '@/stores/useCalendarStore'
 import { useHapticFeedback } from '@/composables/useHapticFeedback'
 import { useTTSPlayer } from '@/composables/useTTSPlayer'
+import { useWebSocket } from '@/composables/useWebSocket'
+import { useAudioRecorder } from '@/composables/useAudioRecorder'
+import { useVADController } from '@/composables/useVADController'
 
 // UI 组件
 import VoiceStatusIndicator from '@/modules/sensory/VoiceStatusIndicator.vue'
@@ -163,7 +166,7 @@ import ConflictNegotiation from '@/modules/stateMachine/ConflictNegotiation.vue'
 import TTSControlBar from '@/modules/sensory/TTSControlBar.vue'
 import SearchAgentCard from '@/modules/stateMachine/SearchAgentCard.vue'
 
-import type { ConflictItem, WebSearchEvent } from '@/types/contracts'
+import type { ConflictItem, WebSearchEvent, WSFrame, AgentMetadata } from '@/types/contracts'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
@@ -172,7 +175,6 @@ const { vibrate } = useHapticFeedback()
 const { speakText, stop: stopTTS } = useTTSPlayer()
 
 const flowScrollContainer = ref<HTMLElement | null>(null)
-const mockVolume = ref(0)
 
 // M9 Web Search Agent 状态
 const currentSearchQuery = ref('')
@@ -186,24 +188,16 @@ const quickSuggestions = [
   '添加买牛奶的待办'
 ]
 
-
-
-const mockConflicts = computed<ConflictItem[]>(() => {
-  const todayStr = new Date().toISOString().split('T')[0]
-  return [{
-    existing_event_id: 'ev-2',
-    existing_title: '语音日历前端架构评审',
-    overlap_start: `${todayStr}T14:00:00`,
-    overlap_end: `${todayStr}T15:30:00`,
-    severity: 'full'
-  }]
-})
+// State for dynamically bound components
+const currentConflicts = ref<ConflictItem[]>([])
+const conflictSuggestions = ref<string[]>([])
+const clarificationMissingFields = ref<string[]>([])
+const clarificationMessage = ref('')
 
 function goHome() {
   router.push('/')
 }
 
-// 自动滚动到底部
 function scrollToBottom() {
   nextTick(() => {
     if (flowScrollContainer.value) {
@@ -212,7 +206,172 @@ function scrollToBottom() {
   })
 }
 
-// 键盘文本录入及提交
+// ----------------------------------------------------------------------
+// 真实通信：WebSocket 接入 (M2)
+// ----------------------------------------------------------------------
+const wsUrl = `ws://${window.location.hostname}:8000/api/v1/voice/stream`
+const ws = useWebSocket({
+  url: wsUrl,
+  onStateChange: (state) => {
+    sessionStore.setConnectionState(state)
+  },
+  onMessage: (frame: WSFrame) => {
+    handleWebSocketMessage(frame)
+  }
+})
+
+function initWsSession() {
+  ws.connect(sessionStore.sessionId)
+  setTimeout(() => {
+    if (ws.state.value === 'connected') {
+      ws.sendFrame('SESSION_INIT', { 
+        session_id: sessionStore.sessionId,
+        user_id: sessionStore.currentUser?.email || 'user-001'
+      }, sessionStore.sessionId)
+    }
+  }, 500)
+}
+
+function handleWebSocketMessage(frame: WSFrame) {
+  const payload = frame.payload as any
+  switch (frame.type) {
+    case 'STATE_UPDATE':
+      if (payload.state) sessionStore.setVoiceState(payload.state)
+      if (payload.message) {
+        sessionStore.addMessage({ role: 'system', content: payload.message, type: 'text' })
+        scrollToBottom()
+      }
+      break
+    case 'TRANSCRIPT_PARTIAL':
+      sessionStore.updatePartialTranscript(payload.text)
+      break
+    case 'TRANSCRIPT_FINAL':
+      sessionStore.setFinalTranscript(payload.text)
+      break
+    case 'CLARIFICATION_ASK':
+      sessionStore.setVoiceState('clarifying')
+      clarificationMissingFields.value = payload.missing_fields || []
+      clarificationMessage.value = payload.message || '请补充信息'
+      sessionStore.addMessage({ role: 'system', content: clarificationMessage.value, type: 'clarification' })
+      speakText(clarificationMessage.value)
+      scrollToBottom()
+      break
+    case 'CONFLICT_ALERT':
+      sessionStore.setVoiceState('conflict')
+      currentConflicts.value = payload.conflicts || []
+      conflictSuggestions.value = payload.suggestions ? payload.suggestions.map((s:any) => s.reason) : []
+      sessionStore.addMessage({ role: 'system', content: payload.message, type: 'conflict' })
+      speakText(payload.message)
+      scrollToBottom()
+      break
+    case 'SEMANTIC_RESULT':
+      if (payload.intent === 'SEARCH' && payload.search_response) {
+        sessionStore.setVoiceState('searching')
+        currentSearchQuery.value = payload.search_response.search_raw_query || ''
+        currentSearchStatus.value = payload.search_response.status === 'success' ? 'results' : 'searching'
+        currentSearchEvents.value = (payload.search_response.extracted_events || []).map((e: any) => ({
+          title: e.title || '',
+          start_time: e.start_time || '',
+          end_time: e.end_time || '',
+          location: e.location || '',
+          description: e.description || '',
+          source_url: e.source_url || '',
+        }))
+        sessionStore.addMessage({
+          role: 'system',
+          content: payload.search_response.reply_text || '搜索完成',
+          type: 'search',
+        })
+        scrollToBottom()
+      }
+      break
+    case 'ACTION_RESULT':
+      sessionStore.setVoiceState('success')
+      sessionStore.addMessage({ role: 'system', content: payload.message, type: 'result' })
+      if (payload.event) {
+        calendarStore.addEvent(payload.event)
+      }
+      scrollToBottom()
+      setTimeout(() => sessionStore.setVoiceState('idle'), 2000)
+      break
+    case 'PLAYBACK_CONTROL':
+      if (payload.action === 'START_TTS') {
+        sessionStore.setVoiceState('tts_playing')
+        if (payload.reply_text) {
+          speakText(payload.reply_text)
+        }
+      }
+      break
+    case 'VAD_TIMEOUT_ADJUST':
+      if (payload.suggested_silence_timeout_ms) {
+        vad.setTimeout(payload.suggested_silence_timeout_ms)
+      }
+      break
+    case 'TTS_AUDIO_CHUNK':
+      // 真实流式音频处理预留接口，当前直接使用前端 TTSPlayer 的 Web Speech API
+      break
+  }
+}
+
+// ----------------------------------------------------------------------
+// 真实通信：录音采集与断句 (M1)
+// ----------------------------------------------------------------------
+const vad = useVADController({
+  onSpeechStart: () => {},
+  onSpeechEnd: () => {
+    if (sessionStore.voiceState === 'recording') {
+      stopVoiceInput()
+    }
+  }
+})
+
+const recorder = useAudioRecorder({
+  onVolumeChange: (vol) => {
+    vad.feedVolume(vol)
+  },
+  onChunk: (chunk, seqNum, isFinal) => {
+    ws.sendAudioChunk(chunk, sessionStore.sessionId, seqNum, isFinal)
+  }
+})
+
+function startVoiceInput() {
+  stopTTS()
+  vibrate('recording')
+  sessionStore.setVoiceState('recording')
+  
+  if (ws.state.value !== 'connected') {
+    initWsSession()
+  }
+
+  if (sessionStore.isTTSPlaying) {
+    ws.sendInterrupt(sessionStore.sessionId)
+  }
+
+  recorder.startRecording()
+  vad.reset()
+}
+
+function stopVoiceInput() {
+  recorder.stopRecording()
+  vibrate('processing')
+  sessionStore.setVoiceState('processing')
+}
+
+function handleTapButton() {
+  if (sessionStore.isTTSPlaying) {
+    stopTTS()
+    ws.sendInterrupt(sessionStore.sessionId)
+    sessionStore.setVoiceState('idle')
+  } else if (sessionStore.voiceState === 'idle') {
+    startVoiceInput()
+  } else if (sessionStore.voiceState === 'recording') {
+    stopVoiceInput()
+  }
+}
+
+// ----------------------------------------------------------------------
+// 文本交互与快捷建议
+// ----------------------------------------------------------------------
 const keyboardInputText = ref('')
 
 function handleKeyboardSubmit() {
@@ -224,566 +383,45 @@ function handleKeyboardSubmit() {
   sessionStore.setVoiceState('processing')
   sessionStore.setFinalTranscript(text)
   
-  setTimeout(() => {
-    processUserInput(text)
-  }, 800)
-}
-
-// 模拟音量变化
-let volumeInterval: ReturnType<typeof setInterval> | null = null
-function simulateVolume() {
-  volumeInterval = setInterval(() => {
-    mockVolume.value = 0.1 + Math.random() * 0.7
-  }, 100)
-}
-function stopVolumeSimulation() {
-  if (volumeInterval) {
-    clearInterval(volumeInterval)
-    volumeInterval = null
-  }
-  mockVolume.value = 0
-}
-
-// 实时转写流式上屏仿真 (Streaming Transcript Simulation)
-let streamingInterval: ReturnType<typeof setInterval> | null = null
-
-function startStreamingSimulation() {
-  sessionStore.setFinalTranscript('')
-  sessionStore.updatePartialTranscript('')
+  sessionStore.addMessage({ role: 'user', content: text, type: 'text' })
+  scrollToBottom()
   
-  const mockSpeechTemplates = [
-    '帮我创建明天下午三点和PM开会',
-    '添加买牛奶的待办日程',
-    '联网检索2026年杭州的动漫展',
-    '搜一下上海最近的实践活动',
-    '查询大家明天的忙闲日程'
-  ]
-  const targetSentence = mockSpeechTemplates[Math.floor(Math.random() * mockSpeechTemplates.length)]
-  const chars = targetSentence.split('')
-  let currentIdx = 0
-  
-  if (streamingInterval) {
-    clearInterval(streamingInterval)
-  }
-  
-  streamingInterval = setInterval(() => {
-    if (currentIdx < chars.length) {
-      const partial = chars.slice(0, currentIdx + 1).join('')
-      sessionStore.updatePartialTranscript(partial)
-      currentIdx++
-    } else {
-      if (streamingInterval) {
-        clearInterval(streamingInterval)
-        streamingInterval = null
-      }
-    }
-  }, 180)
-}
-
-function stopStreamingSimulation() {
-  if (streamingInterval) {
-    clearInterval(streamingInterval)
-    streamingInterval = null
-  }
-}
-
-// 语音识别相关
-let recognition: any = null
-let isRecording = false
-
-// 初始化语音识别
-function initSpeechRecognition() {
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-  if (!SpeechRecognition) {
-    console.warn('浏览器不支持语音识别')
-    return null
-  }
-  
-  const rec = new SpeechRecognition()
-  rec.continuous = false
-  rec.interimResults = true
-  rec.lang = 'zh-CN'
-  
-  rec.onresult = (event: any) => {
-    let interimTranscript = ''
-    let finalTranscript = ''
-    
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript
-      if (event.results[i].isFinal) {
-        finalTranscript += transcript
-      } else {
-        interimTranscript += transcript
-      }
-    }
-    
-    if (interimTranscript) {
-      sessionStore.updatePartialTranscript(interimTranscript)
-    }
-    
-    if (finalTranscript) {
-      sessionStore.setFinalTranscript(finalTranscript)
-      sessionStore.updatePartialTranscript('')
-    }
-  }
-  
-  rec.onend = () => {
-    isRecording = false
-    if (sessionStore.voiceState === 'recording') {
-      stopVoiceInput()
-    }
-  }
-  
-  rec.onerror = (event: any) => {
-    console.error('语音识别错误:', event.error)
-    isRecording = false
-    sessionStore.setVoiceState('idle')
-  }
-  
-  return rec
-}
-
-// 语音交互状态流控制
-function startVoiceInput() {
-  stopTTS()
-  vibrate('recording')
-  sessionStore.setVoiceState('recording')
-  sessionStore.setConnectionState('connected')
-  simulateVolume()
-  
-  // 尝试使用浏览器语音识别
-  if (!recognition) {
-    recognition = initSpeechRecognition()
-  }
-  
-  if (recognition && !isRecording) {
-    try {
-      recognition.start()
-      isRecording = true
-    } catch (e) {
-      console.error('启动语音识别失败:', e)
-      // 回退到模拟模式
-      startStreamingSimulation()
-    }
-  } else {
-    // 回退到模拟模式
-    startStreamingSimulation()
-  }
-}
-
-function stopVoiceInput() {
-  stopVolumeSimulation()
-  stopStreamingSimulation()
-  
-  if (recognition && isRecording) {
-    try {
-      recognition.stop()
-    } catch (e) {
-      // 忽略
-    }
-    isRecording = false
-  }
-  
-  vibrate('processing')
-  sessionStore.setVoiceState('processing')
-  
-  const finalSpeechText = sessionStore.partialTranscript || sessionStore.finalTranscript || '明天下午三点和PM开会'
-  sessionStore.setFinalTranscript(finalSpeechText)
-  sessionStore.updatePartialTranscript('')
-  
-  setTimeout(() => {
-    processUserInput(finalSpeechText)
-  }, 500)
-}
-
-function handleTapButton() {
-  if (sessionStore.isTTSPlaying) {
-    stopTTS()
-    sessionStore.setVoiceState('idle')
-  } else if (sessionStore.voiceState === 'idle') {
-    startVoiceInput()
-    setTimeout(() => {
-      if (sessionStore.voiceState === 'recording') {
-        stopVoiceInput()
-      }
-    }, 2800)
-  }
+  ws.sendFrame('TEXT_INPUT', { text }, sessionStore.sessionId)
 }
 
 function handleQuickInput(text: string) {
   stopTTS()
   sessionStore.setVoiceState('processing')
   sessionStore.setFinalTranscript(text)
-  setTimeout(() => {
-    processUserInput(text)
-  }, 1000)
+  
+  sessionStore.addMessage({ role: 'user', content: text, type: 'text' })
+  scrollToBottom()
+  
+  ws.sendFrame('TEXT_INPUT', { text }, sessionStore.sessionId)
 }
 
-// 对话与场景核心逻辑
-import { createEvent, checkConflicts, healthCheck } from '@/services/api'
-
-const API_BASE_URL = 'http://localhost:8000'
-const DEFAULT_USER_ID = 'user-001'
-
-async function processUserInput(text: string) {
-  // 1. 添加用户消息
-  sessionStore.addMessage({
-    role: 'user',
-    content: text,
-    type: 'voice'
-  })
-  scrollToBottom()
-
-  // 检查后端是否可用
-  const backendAvailable = await healthCheck()
-  
-  if (!backendAvailable) {
-    sessionStore.addMessage({
-      role: 'system',
-      content: '后端服务未启动，请先启动后端服务 (python -m uvicorn app.main:app --port 8000)',
-      type: 'error'
-    })
-    sessionStore.setVoiceState('idle')
-    return
-  }
-
-  // 2. 规则路由与意图匹配模拟
-  if (text.includes('搜') || text.includes('查') || text.includes('实践') || text.includes('活动') || text.includes('展') || text.includes('检索')) {
-    // M9 联网检索意图嗅探与路由
-    sessionStore.setVoiceState('searching')
-    currentSearchQuery.value = text
-    currentSearchStatus.value = 'searching'
-    currentSearchEvents.value = []
-    speakText('正在连接互联网搜索引擎为您检索实践活动...')
-
-    // 模拟搜索流程延时
-    setTimeout(() => {
-      currentSearchStatus.value = 'parsing'
-      speakText('已抓取到相关网页，大模型正在提炼日程实体...')
-      
-      setTimeout(() => {
-        currentSearchStatus.value = 'results'
-        
-        // 构造针对城市的精品 mock 实践活动数据
-        if (text.includes('杭州')) {
-          currentSearchEvents.value = [
-            {
-              title: '2026年杭州国际动漫节 (CICAF)',
-              start_time: '2026-06-01T09:00:00+08:00',
-              end_time: '2026-06-05T18:00:00+08:00',
-              location: '杭州白马湖动漫广场',
-              description: '第二十二届中国国际动漫节，汇聚全国顶尖动漫游戏展商与数万名动漫同好，设有国漫高峰论坛、声优大赛与Cosplay盛典。',
-              source_url: 'https://www.cicaf.com'
-            },
-            {
-              title: '2026年杭州西湖荷花艺术节',
-              start_time: '2026-07-10T08:00:00+08:00',
-              end_time: '2026-07-20T17:00:00+08:00',
-              location: '杭州西湖曲院风荷',
-              description: '年度西湖江南文化艺术盛宴，包含千亩荷花水上观赏会、江南丝竹音乐会、古风非遗文创市集等丰富实践活动。',
-              source_url: 'https://www.hzwestlake.gov.cn'
-            }
-          ]
-        } else if (text.includes('北京')) {
-          currentSearchEvents.value = [
-            {
-              title: '2026年北京国际汽车展览会 (Auto China)',
-              start_time: '2026-06-15T09:00:00+08:00',
-              end_time: '2026-06-20T17:30:00+08:00',
-              location: '北京中国国际展览中心 (顺义馆)',
-              description: '全球顶级车展，聚焦新能源智慧出行、自动驾驶技术与新一代概念车展示，设有科技先锋实践互动体验区。',
-              source_url: 'https://www.autochina.com.cn'
-            },
-            {
-              title: '2026年北京古风非遗手工文化沙龙',
-              start_time: '2026-06-06T14:00:00+08:00',
-              end_time: '2026-06-06T18:00:00+08:00',
-              location: '北京南锣鼓巷文化艺术馆',
-              description: '沉浸式非物质文化遗产手工实践，特邀非遗大师现场指导京剧脸谱绘制、剪纸及景泰蓝掐丝工艺制作。',
-              source_url: 'https://www.bjheritage.org.cn'
-            }
-          ]
-        } else if (text.includes('上海')) {
-          currentSearchEvents.value = [
-            {
-              title: '2026年上海草莓音乐节',
-              start_time: '2026-06-12T13:00:00+08:00',
-              end_time: '2026-06-14T21:30:00+08:00',
-              location: '上海世博公园',
-              description: '大型户外音乐盛宴，设有草莓舞台、爱舞台、新血计划舞台，结合时尚创意市集、美食街区及环保实践营地。',
-              source_url: 'https://www.modernsky.com'
-            },
-            {
-              title: '2026年上海世博会智慧科技成果展',
-              start_time: '2026-06-25T09:30:00+08:00',
-              end_time: '2026-06-28T17:00:00+08:00',
-              location: '上海世博展览馆 1号馆',
-              description: '展示前沿人工智能、脑机接口、人形机器人与低空航行器，设有青少年科技创新实践互动专区。',
-              source_url: 'https://www.shexpocenter.com'
-            }
-          ]
-        } else {
-          currentSearchEvents.value = [
-            {
-              title: '2026年人工智能开发者大会 (AI DevCon)',
-              start_time: '2026-06-08T09:00:00+08:00',
-              end_time: '2026-06-10T18:00:00+08:00',
-              location: '国家会议中心',
-              description: '汇聚前沿AI科学家与广大开发者的顶级技术大会，涵盖大模型微调、智能体编排及多模态交互实践工坊。',
-              source_url: 'https://www.aidevcon.org'
-            },
-            {
-              title: '2026年社区青年志愿者环保实践活动',
-              start_time: '2026-06-05T08:30:00+08:00',
-              end_time: '2026-06-05T12:00:00+08:00',
-              location: '城市生态森林公园西门',
-              description: '关爱生态，绿色出行。青年志愿环保实践活动，进行垃圾分类宣讲、湿地环境保护及爱心植树维护。',
-              source_url: 'https://www.greenvolunteers.cn'
-            }
-          ]
-        }
-        
-        const voiceText = `联网检索成功！我为您查到了 ${currentSearchEvents.value.length} 个相关的实践活动。您可以点击卡片一键添加至日历中。`
-        sessionStore.addMessage({
-          role: 'system',
-          content: voiceText,
-          type: 'search',
-          metadata: {
-            web_search_response: {
-              session_id: sessionStore.sessionId,
-              status: 'success',
-              search_raw_query: text,
-              extracted_events: currentSearchEvents.value,
-              reply_text: voiceText
-            }
-          }
-        })
-        speakText(voiceText)
-        scrollToBottom()
-      }, 1200)
-    }, 1500)
-
-  } else if (text.includes('两点') || text.includes('14:00')) {
-    // 触发时间冲突
-    sessionStore.setVoiceState('conflict')
-    sessionStore.addMessage({
-      role: 'system',
-      content: '检测到时间冲突！明天下午 14:00 有已存在日程“语音日历前端架构评审”。推荐改期至下午 3:30，或在明天同一时间强制创建。',
-      type: 'conflict'
-    })
-    vibrate('conflict')
-    speakText('对不起，两点钟您有另一个日程冲突。推荐改期到下午三点半，或者强制创建。')
-  } else if (text.includes('待办') || text.includes('任务')) {
-    // 创建待办
-    const taskTitle = text.replace(/帮我|添加|待办|任务/g, '').trim() || '新待办任务'
-    calendarStore.addTask({
-      id: `task-${Date.now()}`,
-      title: taskTitle,
-      priority: 'medium',
-      is_completed: false,
-      is_deleted: false,
-      version_tag: 'v1',
-      created_at: new Date().toISOString()
-    })
-    sessionStore.setVoiceState('success')
-    sessionStore.addMessage({
-      role: 'system',
-      content: `好的，已成功添加待办任务：${taskTitle}`,
-      type: 'result'
-    })
-    vibrate('success')
-    speakText(`已为您添加待办：${taskTitle}`)
-    setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
-  } else if (text.includes('三点') || text.includes('下午3点') || text.includes('15:00') || text.includes('开会') || text.includes('会议')) {
-    // 解析时间
-    const now = new Date()
-    let targetDate = new Date(now)
-    targetDate.setDate(targetDate.getDate() + 1) // 默认明天
-    
-    if (text.includes('今天')) {
-      targetDate = new Date(now)
-    } else if (text.includes('后天')) {
-      targetDate.setDate(targetDate.getDate() + 2)
-    }
-    
-    let hour = 15 // 默认下午3点
-    if (text.includes('两点') || text.includes('14:00') || text.includes('14点')) hour = 14
-    else if (text.includes('三点') || text.includes('15:00') || text.includes('15点')) hour = 15
-    else if (text.includes('四点') || text.includes('16:00') || text.includes('16点')) hour = 16
-    else if (text.includes('上午') || text.includes('九点') || text.includes('9:00')) hour = 9
-    
-    const startTime = new Date(targetDate)
-    startTime.setHours(hour, 0, 0, 0)
-    const endTime = new Date(startTime)
-    endTime.setHours(hour + 1, 0, 0, 0)
-    
-    const startTimeStr = startTime.toISOString().replace('Z', '+08:00')
-    const endTimeStr = endTime.toISOString().replace('Z', '+08:00')
-    
-    // 提取标题
-    let title = '新会议'
-    if (text.includes('开会') || text.includes('会议')) {
-      title = text.replace(/帮我|创建|添加|明天|今天|后天|下午|上午|的|和|开会|会议/g, '').trim() || '会议'
-    }
-    
-    // 检查冲突
-    try {
-      const conflictResult = await checkConflicts(DEFAULT_USER_ID, startTimeStr, endTimeStr)
-      
-      if (conflictResult.has_conflict) {
-        // 有冲突
-        sessionStore.setVoiceState('conflict')
-        mockConflicts.value = conflictResult.conflicts
-        sessionStore.addMessage({
-          role: 'system',
-          content: `检测到时间冲突！您在 ${startTime.getHours()}:00 已有日程。`,
-          type: 'conflict'
-        })
-        vibrate('conflict')
-        speakText('对不起，这个时间段您有另一个日程冲突。推荐改期或强制创建。')
-        return
-      }
-      
-      // 无冲突，创建事件
-      const newEvent = await createEvent({
-        user_id: DEFAULT_USER_ID,
-        title: title,
-        start_time: startTimeStr,
-        end_time: endTimeStr,
-        timezone: 'Asia/Shanghai'
-      })
-      
-      calendarStore.addEvent({
-        id: newEvent.id || `ev-${Date.now()}`,
-        title: title,
-        start_time: startTimeStr,
-        end_time: endTimeStr,
-        calendar_id: 'work',
-        calendar_name: '工作',
-        color: '#8B5CF6',
-        is_deleted: false,
-        version_tag: 'v1',
-        created_at: new Date().toISOString()
-      })
-      
-      sessionStore.setVoiceState('success')
-      sessionStore.addMessage({
-        role: 'system',
-        content: `好的，已为您成功创建日程：${title}，时间：${startTime.getMonth()+1}月${startTime.getDate()}日 ${hour}:00`,
-        type: 'result'
-      })
-      vibrate('success')
-      speakText(`好的，已为您成功创建${title}！`)
-      setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
-    } catch (error) {
-      console.error('创建事件失败:', error)
-      sessionStore.addMessage({
-        role: 'system',
-        content: '创建事件失败，请重试',
-        type: 'error'
-      })
-      sessionStore.setVoiceState('idle')
-    }
-  } else {
-    // 意图不明，触发追问 Clarification
-    sessionStore.setVoiceState('clarifying')
-    sessionStore.addMessage({
-      role: 'system',
-      content: '收到添加日程请求。但我没有抓取到明确的日程主题。请问您的日程标题是什么？',
-      type: 'clarification'
-    })
-    speakText('收到日程请求。请问这个日程的主题是什么？')
-  }
-  scrollToBottom()
+// ----------------------------------------------------------------------
+// 组件事件：追问与冲突
+// ----------------------------------------------------------------------
+function handleSkipClarification() {
+  ws.sendFrame('TEXT_INPUT', { text: '跳过' }, sessionStore.sessionId)
 }
 
-// 冲突解决
-function handleResolveConflict(_suggestion: string) {
-  const todayStr = new Date().toISOString().split('T')[0]
-  calendarStore.addEvent({
-    id: `ev-${Date.now()}`,
-    title: '调整后的PM对齐会议',
-    start_time: `${todayStr}T15:30:00`,
-    end_time: `${todayStr}T16:30:00`,
-    calendar_id: 'work',
-    calendar_name: '工作',
-    color: '#8B5CF6',
-    is_deleted: false,
-    version_tag: 'v1',
-    created_at: new Date().toISOString()
-  })
-  
-  sessionStore.setVoiceState('success')
-  sessionStore.addMessage({
-    role: 'system',
-    content: `冲突已解决！已创建日程：调整后的PM对齐会议，时间调整为下午 15:30 - 16:30。`,
-    type: 'result'
-  })
-  vibrate('success')
-  speakText('冲突已解决，已为您把会议调整到下午三点半！')
-  setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
-  scrollToBottom()
+function handleResolveConflict(suggestion: string) {
+  ws.sendFrame('TEXT_INPUT', { text: suggestion }, sessionStore.sessionId)
 }
 
 function handleForceCreate() {
-  const todayStr = new Date().toISOString().split('T')[0]
-  calendarStore.addEvent({
-    id: `ev-${Date.now()}`,
-    title: 'PM对齐会议 (强制覆盖)',
-    start_time: `${todayStr}T14:00:00`,
-    end_time: `${todayStr}T15:00:00`,
-    calendar_id: 'work',
-    calendar_name: '工作',
-    color: '#D32F2F',
-    is_deleted: false,
-    version_tag: 'v1',
-    created_at: new Date().toISOString()
-  })
-  
-  sessionStore.setVoiceState('success')
-  sessionStore.addMessage({
-    role: 'system',
-    content: `已为您强行创建明天下午 14:00 的日程，请注意与既有日程时间重叠！`,
-    type: 'result'
-  })
-  vibrate('success')
-  speakText('已强行创建日程，请注意日程存在时间上的冲突。')
-  setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
-  scrollToBottom()
+  ws.sendFrame('TEXT_INPUT', { text: '强制创建' }, sessionStore.sessionId)
 }
 
 function handleCancelConflict() {
-  sessionStore.setVoiceState('idle')
-  sessionStore.addMessage({
-    role: 'system',
-    content: `已取消创建日程。`,
-    type: 'text'
-  })
-  speakText('已取消。')
+  ws.sendFrame('TEXT_INPUT', { text: '取消' }, sessionStore.sessionId)
 }
 
-// 补充信息回答
-function handleSkipClarification() {
-  const todayStr = new Date().toISOString().split('T')[0]
-  calendarStore.addEvent({
-    id: `ev-${Date.now()}`,
-    title: '未命名日程',
-    start_time: `${todayStr}T16:00:00`,
-    end_time: `${todayStr}T17:00:00`,
-    calendar_id: 'personal',
-    calendar_name: '个人',
-    color: '#10B981',
-    is_deleted: false,
-    version_tag: 'v1',
-    created_at: new Date().toISOString()
-  })
-  sessionStore.setVoiceState('success')
-  speakText('已为您创建未命名日程')
-  setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
-}
-
-
-
+// ----------------------------------------------------------------------
+// 搜索代理 (Mock)
+// ----------------------------------------------------------------------
 function handleSearchAddEvent(event: WebSearchEvent) {
   vibrate('success')
   calendarStore.addEvent({
@@ -802,17 +440,13 @@ function handleSearchAddEvent(event: WebSearchEvent) {
   })
   
   const textFeedback = `已成功将“${event.title}”添加入您的日历日程！`
-  sessionStore.addMessage({
-    role: 'system',
-    content: textFeedback,
-    type: 'result'
-  })
+  sessionStore.addMessage({ role: 'system', content: textFeedback, type: 'result' })
   speakText(textFeedback)
   scrollToBottom()
 }
 
 function handleSearchRetry() {
-  processUserInput(currentSearchQuery.value)
+  ws.sendFrame('TEXT_INPUT', { text: currentSearchQuery.value }, sessionStore.sessionId)
 }
 
 function speakLastMessage() {
@@ -823,16 +457,14 @@ function speakLastMessage() {
   }
 }
 
-// 最新的一条系统播报
 const latestSystemMessage = computed(() => {
-  return [...sessionStore.messages]
-    .reverse()
-    .find(m => m.role === 'system')
+  return [...sessionStore.messages].reverse().find(m => m.role === 'system')
 })
 
 onMounted(() => {
   sessionStore.startSession()
-  sessionStore.setConnectionState('connected')
+  initWsSession()
+  
   sessionStore.addMessage({
     role: 'system',
     content: '你好，我是你的语音日程管家。按住屏幕中下方麦克风并说话即可添加、修改或查询日程。例如你可以说：“帮我创建明天下午三点的项目评审会”',

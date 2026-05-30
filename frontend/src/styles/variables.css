@@ -1,60 +1,47 @@
 /* ============================================================
-   Voice Calendar — CSS Design Tokens
-   暗色主题优先 | HSL 色彩体系 | 支持 data-theme 切换
+   Voice Calendar — CSS Design Tokens (Business Elite Edition)
    ============================================================ */
 
 :root {
-  /* ── 色彩令牌（暗色主题） ─────────────────────────── */
+  /* ── 色彩令牌 ─────────────────────────── */
+  /* 主色调 — 领英蓝 (Professional Blue) */
+  --vc-primary-h: 211;
+  --vc-primary-s: 90%;
+  --vc-primary-l: 40%;
+  --vc-primary: #0A66C2;
+  --vc-primary-light: hsl(211, 90%, 50%);
+  --vc-primary-dark: hsl(211, 90%, 30%);
+  --vc-primary-glow: hsla(211, 90%, 40%, 0.2);
 
-  /* 主色调 — 沉稳石墨灰 (Graphite Slate) */
-  --vc-primary-h: 215;
-  --vc-primary-s: 18%;
-  --vc-primary-l: 35%;
-  --vc-primary: hsl(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l));
-  --vc-primary-light: hsl(var(--vc-primary-h), var(--vc-primary-s), 55%);
-  --vc-primary-dark: hsl(var(--vc-primary-h), var(--vc-primary-s), 22%);
-  --vc-primary-glow: hsl(var(--vc-primary-h), var(--vc-primary-s), 45%);
-
-  /* 强调色 — 优雅古铜金 (Sober Bronze Sand) */
-  --vc-accent-h: 36;
-  --vc-accent-s: 16%;
-  --vc-accent-l: 48%;
-  --vc-accent: hsl(var(--vc-accent-h), var(--vc-accent-s), var(--vc-accent-l));
-  --vc-accent-light: hsl(var(--vc-accent-h), var(--vc-accent-s), 62%);
-
-  /* 语义色 — 商务克制调 */
-  --vc-success: hsl(150, 20%, 45%);
-  --vc-success-soft: hsla(150, 20%, 45%, 0.15);
-  --vc-warning: hsl(35, 30%, 45%);
-  --vc-warning-soft: hsla(35, 30%, 45%, 0.15);
-  --vc-danger: hsl(0, 30%, 50%);
-  --vc-danger-soft: hsla(0, 30%, 50%, 0.15);
-  --vc-info: hsl(210, 25%, 45%);
-  --vc-info-soft: hsla(210, 25%, 45%, 0.12);
-
-  /* 录音状态色 — 朴素雅红 */
-  --vc-recording: hsl(0, 35%, 52%);
-  --vc-recording-glow: hsla(0, 35%, 52%, 0.2);
-  --vc-processing: hsl(35, 30%, 45%);
-  --vc-processing-glow: hsla(35, 30%, 45%, 0.15);
-
-  /* 背景层级 — 石墨灰黑 */
-  --vc-bg-base: hsl(215, 12%, 10%);
-  --vc-bg-surface: hsl(215, 10%, 14%);
-  --vc-bg-elevated: hsl(215, 10%, 18%);
-  --vc-bg-overlay: hsla(215, 12%, 8%, 0.9);
-  --vc-bg-glass: hsla(215, 10%, 14%, 0.8);
+  /* 背景层级 */
+  --vc-bg-base: #F4F5F7;
+  --vc-bg-surface: #FFFFFF;
+  --vc-bg-elevated: #FFFFFF;
+  --vc-bg-overlay: rgba(29, 29, 31, 0.4);
+  --vc-bg-glass: rgba(255, 255, 255, 0.85);
 
   /* 文字层级 */
-  --vc-text-primary: hsl(220, 15%, 94%);
-  --vc-text-secondary: hsl(220, 12%, 64%);
-  --vc-text-tertiary: hsl(220, 10%, 44%);
-  --vc-text-inverse: hsl(225, 25%, 8%);
+  --vc-text-primary: #1D1D1F;
+  --vc-text-secondary: #86868B;
+  --vc-text-tertiary: #A1A1A6;
+  --vc-text-inverse: #FFFFFF;
+
+  /* 状态色 */
+  --vc-warning: #F56A00;
+  --vc-warning-soft: rgba(245, 106, 0, 0.1);
+  --vc-success: #34C759;
+  --vc-success-soft: rgba(52, 199, 89, 0.1);
+  --vc-danger: #FF3B30;
+  --vc-info: #0A66C2;
+
+  /* 录音状态色 */
+  --vc-recording: #0A66C2;
+  --vc-recording-glow: rgba(10, 102, 194, 0.2);
 
   /* 边框与分割 */
-  --vc-border: hsla(220, 15%, 40%, 0.2);
-  --vc-border-active: hsla(224, 76%, 48%, 0.5);
-  --vc-divider: hsla(220, 15%, 40%, 0.1);
+  --vc-border: rgba(29, 29, 31, 0.08);
+  --vc-border-active: #0A66C2;
+  --vc-divider: rgba(29, 29, 31, 0.05);
 
   /* ── 间距系统（4px 基数） ────────────────────────── */
   --vc-space-xs: 4px;
@@ -63,18 +50,17 @@
   --vc-space-lg: 24px;
   --vc-space-xl: 32px;
   --vc-space-2xl: 48px;
-  --vc-space-3xl: 64px;
 
   /* ── 圆角 ────────────────────────────────────────── */
-  --vc-radius-sm: 4px;
-  --vc-radius-md: 8px;
-  --vc-radius-lg: 12px;
-  --vc-radius-xl: 16px;
+  --vc-radius-sm: 6px;
+  --vc-radius-md: 12px;
+  --vc-radius-lg: 20px;
+  --vc-radius-xl: 28px;
   --vc-radius-full: 9999px;
 
   /* ── 字体 ────────────────────────────────────────── */
-  --vc-font-sans: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --vc-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --vc-font-sans: 'SF Pro Display', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --vc-font-mono: ui-monospace, 'SF Mono', Consolas, monospace;
 
   /* 字号 */
   --vc-text-xs: 0.75rem;     /* 12px */
@@ -83,13 +69,10 @@
   --vc-text-lg: 1.125rem;    /* 18px */
   --vc-text-xl: 1.25rem;     /* 20px */
   --vc-text-2xl: 1.5rem;     /* 24px */
-  --vc-text-3xl: 2rem;       /* 32px */
-  --vc-text-4xl: 2.5rem;     /* 40px */
 
   /* 行高 */
-  --vc-leading-tight: 1.25;
+  --vc-leading-tight: 1.2;
   --vc-leading-normal: 1.5;
-  --vc-leading-relaxed: 1.75;
 
   /* 字重 */
   --vc-weight-normal: 400;
@@ -98,48 +81,25 @@
   --vc-weight-bold: 700;
 
   /* ── 阴影 ────────────────────────────────────────── */
-  --vc-shadow-sm: 0 1px 2px hsla(0, 0%, 0%, 0.2);
-  --vc-shadow-md: 0 4px 8px hsla(0, 0%, 0%, 0.25);
-  --vc-shadow-lg: 0 8px 16px hsla(0, 0%, 0%, 0.3);
-  --vc-shadow-glow: 0 0 8px var(--vc-primary-glow);
-  --vc-shadow-recording: 0 0 10px var(--vc-recording-glow);
+  --vc-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --vc-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --vc-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --vc-shadow-glow: 0 4px 12px rgba(10, 102, 194, 0.2);
+  --vc-shadow-recording: 0 0 0 6px rgba(10, 102, 194, 0.15);
 
   /* ── 过渡 ────────────────────────────────────────── */
-  --vc-transition-fast: 120ms ease;
-  --vc-transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
-  --vc-transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
-  --vc-transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --vc-transition-fast: 150ms ease;
+  --vc-transition-base: 200ms ease;
+  --vc-transition-bottom-sheet: 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
 
   /* ── 层级 z-index ────────────────────────────────── */
-  --vc-z-base: 1;
-  --vc-z-dropdown: 100;
-  --vc-z-sticky: 200;
-  --vc-z-overlay: 300;
-  --vc-z-modal: 400;
-  --vc-z-toast: 500;
-  --vc-z-fab: 600;
+  --vc-z-timeline: 10;
+  --vc-z-card: 50;
+  --vc-z-voice-hub: 100;
+  --vc-z-conflict-panel: 200;
+  --vc-z-toast: 300;
 
   /* ── 毛玻璃 ──────────────────────────────────────── */
-  --vc-glass-blur: 20px;
+  --vc-glass-blur: 24px;
   --vc-glass-saturate: 180%;
-}
-
-/* ── 亮色主题覆盖 ──────────────────────────────────── */
-[data-theme="light"] {
-  --vc-bg-base: hsl(215, 10%, 95%);
-  --vc-bg-surface: hsl(215, 10%, 98%);
-  --vc-bg-elevated: hsl(215, 10%, 93%);
-  --vc-bg-overlay: hsla(215, 10%, 98%, 0.9);
-  --vc-bg-glass: hsla(215, 10%, 98%, 0.8);
-
-  --vc-text-primary: hsl(215, 20%, 15%);
-  --vc-text-secondary: hsl(215, 12%, 40%);
-  --vc-text-tertiary: hsl(215, 10%, 60%);
-
-  --vc-border: hsla(215, 15%, 50%, 0.15);
-  --vc-divider: hsla(215, 15%, 50%, 0.06);
-
-  --vc-shadow-sm: 0 1px 2px hsla(0, 0%, 0%, 0.05);
-  --vc-shadow-md: 0 4px 8px hsla(0, 0%, 0%, 0.08);
-  --vc-shadow-lg: 0 8px 16px hsla(0, 0%, 0%, 0.1);
 }

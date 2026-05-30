@@ -469,7 +469,8 @@ interface EventOperation {
 | FastAPI | Web框架 |
 | WebSocket | 实时通信 |
 | LangChain/LangGraph | LLM编排 |
-| Faster-Whisper | 语音识别 |
+| 讯飞/SenseVoice | 语音识别 (云端) |
+| FunASR/Paraformer | 语音识别 (离线) |
 | PostgreSQL | 日历数据存储 |
 | Redis | 会话状态缓存 |
 | SQLAlchemy | ORM |
@@ -478,8 +479,8 @@ interface EventOperation {
 | 模型 | 用途 |
 |------|------|
 | Qwen-2.5-7B/14B | 语义理解、意图识别 |
-| Faster-Whisper | 语音转文本 |
-| TTS模型 | 文本转语音 |
+| SenseVoice/FunASR | 语音转文本 |
+| 火山引擎/ChatTTS | 文本转语音 |
 
 ---
 
@@ -549,7 +550,7 @@ npm run dev
 ### 3. 访问应用
 - 前端：http://localhost:5173
 - 后端API：http://localhost:8000/docs
-- WebSocket：ws://localhost:8000/ws
+- WebSocket：ws://localhost:8000/api/v1/voice/stream
 
 ---
 
@@ -651,7 +652,7 @@ def semantic_correction(raw_text: str, context: dict) -> str:
 
 - [ ] 完成后端FastAPI框架搭建
 - [ ] 实现WebSocket实时通信
-- [ ] 集成Faster-Whisper语音识别
+- [ ] 集成SenseVoice/FunASR语音识别
 - [ ] 集成Qwen-2.5大模型
 - [ ] 实现PostgreSQL数据库设计
 - [ ] 实现Redis会话状态管理

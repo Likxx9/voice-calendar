@@ -78,10 +78,14 @@
   - 音频数据处理
   - 消息路由
 - ✅ AI服务
-  - LLMService - 语义理解、意图识别、实体提取
+  - LLMService - 语义理解、多意图识别、实体提取
   - STTService - 语音转文本
   - CalendarService - 日历操作、冲突检测
   - SessionService - 会话状态管理
+- ✅ Agent 编排层（技术文档 §3）
+  - AgentService - LLM 任务规划、DAG 任务图构建、并行调度器
+  - SearchService - 联网搜索工具（Tavily/SerpAPI/Bing）
+  - ToolRegistry - 统一工具调用接口、超时/重试策略
 - ✅ Docker配置
   - docker-compose.yml
   - Backend Dockerfile
@@ -191,7 +195,8 @@
 |------|------|------|------|
 | M1: 语音感知 | 音频采集、VAD断句、TTS播放 | 麦克风流 | 音频分片/文本 |
 | M2: 网关通信 | WebSocket管理、心跳重连 | 音频分片 | 结构化消息 |
-| M3: 语义理解 | 意图识别、实体提取、纠偏降噪 | 原始文本 | 结构化意图 |
+| M3: 语义理解 | 多意图识别、实体提取、纠偏降噪 | 原始文本 | 结构化意图列表 |
+| L3: Agent编排 | LLM任务规划、DAG构建、并行调度、联网搜索 | 意图列表 | 任务组+执行结果 |
 | M4: 状态机 | 多轮对话、追问引导、冲突协商 | 意图+上下文 | 决策/行动 |
 | M5: 日历管理 | 事件CRUD、冲突检测、视图渲染 | 事件数据 | 日历视图 |
 | M6: 离线同步 | 离线队列、增量同步、冲突解决 | 本地操作 | 同步状态 |
@@ -253,6 +258,13 @@ voice-calendar/
 │   │   ├── core/                # 核心配置
 │   │   ├── models/              # 数据模型
 │   │   ├── services/            # 业务服务
+│   │   │   ├── agent_service.py # Agent 编排层（LLM规划/DAG/调度器）
+│   │   │   ├── search_service.py# 联网搜索工具
+│   │   │   ├── tool_registry.py # 统一工具接口
+│   │   │   ├── llm_service.py   # LLM 语义理解
+│   │   │   ├── calendar_service.py
+│   │   │   ├── session_service.py
+│   │   │   └── stt_service.py
 │   │   └── websocket/           # WebSocket处理
 │   └── requirements.txt
 │
@@ -269,9 +281,11 @@ voice-calendar/
 ## 下一步工作
 
 ### 短期（1-2周）
-- [ ] 完成LLM模型集成（Qwen-2.5）
-- [ ] 完成STT模型集成（Faster-Whisper）
-- [ ] 完成前后端联调
+- [x] 完成 Agent 编排层实现（LLM 规划 + DAG + 并行调度）
+- [x] 完成联网搜索工具集成（Tavily/SerpAPI/Bing）
+- [x] 完成 Claude API 双模型路由（Haiku/Sonnet）
+- [ ] 配置真实 API Key 并端到端联调
+- [ ] 完成STT模型集成（SenseVoice/FunASR）
 - [ ] 编写单元测试
 
 ### 中期（1个月）

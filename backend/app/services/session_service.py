@@ -47,6 +47,7 @@ class SessionService:
             "expires_at": (datetime.utcnow() + timedelta(minutes=settings.SESSION_EXPIRE_MINUTES)).isoformat(),
             "history": [],
             "current_draft": None,
+            "event_buffer": [],  # 事件上下文缓存（设计文档 §2.5：指代消解）
             "context": {
                 "address_book": {},
                 "favorite_locations": {}
@@ -163,6 +164,49 @@ class SessionService:
         
         if session:
             await self.save_session(session_id, session)
+    
+    async def add_to_event_buffer(
+        self,
+        session_id: str,
+        event_id: str,
+        title: str,
+        start_time: str,
+        turn: int
+    ):
+        """
+        添加事件到上下文缓存（设计文档 §2.5：指代消解）
+        
+        在会话期间维护一个事件缓存队列，记录用户在本次会话中提及或操作过的所有事件，
+        用于解析“刚才那个”、“那个会议”等指代表达。
+        """
+        session = await self.get_session(session_id)
+        
+        if not session:
+            return None
+        
+        event_entry = {
+            "event_id": event_id,
+            "title": title,
+            "start_time": start_time,
+            "mentioned_at": turn
+        }
+        
+        session["event_buffer"].append(event_entry)
+        
+        # 限制缓存长度（设计文档 §2.5：默认 5 条）
+        if len(session["event_buffer"]) > 5:
+            session["event_buffer"] = session["event_buffer"][-5:]
+        
+        await self.save_session(session_id, session)
+        return session
+    
+    async def get_event_buffer(self, session_id: str) -> List[Dict[str, Any]]:
+        """获取事件上下文缓存"""
+        session = await self.get_session(session_id)
+        
+        if session:
+            return session.get("event_buffer", [])
+        return []
 
 
 # 全局会话服务实例

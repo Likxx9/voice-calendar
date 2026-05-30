@@ -1,18 +1,6 @@
 <template>
   <div class="default-layout">
-    <!-- 顶部状态栏 -->
-    <header class="default-layout__header vc-glass">
-      <div class="header-brand">
-        <img class="header-brand__logo" src="@/assets/logo.png" alt="语音日历 Logo" />
-        <h1 class="header-brand__title vc-gradient-text">语音日历</h1>
-      </div>
-      <div class="header-status">
-        <ConnectionStatus :state="sessionStore.connectionState" />
-        <SyncStatusBanner :state="offlineQueueStore.syncState" />
-      </div>
-    </header>
-
-    <!-- 主体区域 -->
+    <!-- 主体区域：永远是核心内容（如日历时间轴） -->
     <main class="default-layout__main">
       <router-view v-slot="{ Component }">
         <transition name="fade-slide" mode="out-in">
@@ -21,68 +9,221 @@
       </router-view>
     </main>
 
-    <!-- 底部导航栏 -->
-    <nav class="default-layout__nav vc-glass" role="navigation" aria-label="底部导航">
-      <router-link to="/" class="nav-item" active-class="nav-item--active">
-        <span class="nav-item__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-          </svg>
-        </span>
-        <span class="nav-item__label">日程</span>
-      </router-link>
+    <!-- 全局悬浮 AI 语音中枢 -->
+    <FloatingVoiceHub
+      :voice-state="sessionStore.voiceState"
+      :partial-transcript="sessionStore.partialTranscript"
+      :volume="currentVolume"
+      @press-start="startVoiceInput"
+      @press-end="stopVoiceInput"
+      @tap="handleTapButton"
+    />
 
-      <!-- 核心语音气泡/麦克风按钮（中置高亮） -->
-      <button 
-        class="voice-fab"
-        :class="{ 'voice-fab--recording': sessionStore.isRecording }"
-        aria-label="语音助手"
-        @click="goToAssistant"
-      >
-        <div class="voice-fab__circle">
-          <span class="voice-fab__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="22" />
-            </svg>
-          </span>
-        </div>
-        <div class="voice-fab__ring" />
-      </button>
+    <!-- 全局时间冲突解决面板 (Bottom Sheet) -->
+    <ConflictBottomSheet
+      :is-visible="sessionStore.voiceState === 'conflict'"
+      :conflicts="currentConflicts"
+      :suggestions="conflictSuggestions"
+      @resolve="handleResolveConflict"
+      @cancel="handleCancelConflict"
+    />
 
-      <router-link to="/settings" class="nav-item" active-class="nav-item--active">
-        <span class="nav-item__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-        </span>
-        <span class="nav-item__label">设置</span>
-      </router-link>
-    </nav>
+    <!-- 轻量级 Snackbar (静默任务完成提示) -->
+    <transition name="fade-slide-up">
+      <div v-if="snackbarMessage" class="global-snackbar">
+        ✓ {{ snackbarMessage }}
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/useSessionStore'
-import ConnectionStatus from '@/modules/gateway/ConnectionStatus.vue'
-import SyncStatusBanner from '@/modules/sync/SyncStatusBanner.vue'
+import { useCalendarStore } from '@/stores/useCalendarStore'
+import { useHapticFeedback } from '@/composables/useHapticFeedback'
+import { useTTSPlayer } from '@/composables/useTTSPlayer'
+import { useWebSocket } from '@/composables/useWebSocket'
+import { useAudioRecorder } from '@/composables/useAudioRecorder'
+import { useVADController } from '@/composables/useVADController'
 
-// Mock storage for offline sync state since actual composable might vary slightly
-import { ref } from 'vue'
-const offlineQueueStore = ref({ syncState: 'online' as const })
+import FloatingVoiceHub from '@/components/FloatingVoiceHub.vue'
+import ConflictBottomSheet from '@/components/ConflictBottomSheet.vue'
+import type { ConflictItem, WSFrame } from '@/types/contracts'
 
-const router = useRouter()
 const sessionStore = useSessionStore()
+const calendarStore = useCalendarStore()
+const { vibrate } = useHapticFeedback()
+const { speakText, stop: stopTTS } = useTTSPlayer()
 
-function goToAssistant() {
-  router.push('/conversation')
+const currentVolume = ref(0)
+const snackbarMessage = ref('')
+
+// Conflict State
+const currentConflicts = ref<ConflictItem[]>([])
+const conflictSuggestions = ref<string[]>([])
+
+function showSnackbar(msg: string) {
+  snackbarMessage.value = msg
+  setTimeout(() => {
+    snackbarMessage.value = ''
+  }, 3000)
 }
+
+// ----------------------------------------------------------------------
+// WebSocket 通信 (Agent 编排层通信)
+// ----------------------------------------------------------------------
+const wsUrl = `ws://${window.location.hostname}:8000/api/v1/voice/stream`
+const ws = useWebSocket({
+  url: wsUrl,
+  onStateChange: (state) => {
+    sessionStore.setConnectionState(state)
+  },
+  onMessage: (frame: WSFrame) => {
+    handleWebSocketMessage(frame)
+  }
+})
+
+function initWsSession() {
+  ws.connect(sessionStore.sessionId)
+  setTimeout(() => {
+    if (ws.state.value === 'connected') {
+      ws.sendFrame('SESSION_INIT', { 
+        session_id: sessionStore.sessionId,
+        user_id: sessionStore.currentUser?.email || 'user-001'
+      }, sessionStore.sessionId)
+    }
+  }, 500)
+}
+
+function handleWebSocketMessage(frame: WSFrame) {
+  const payload = frame.payload as any
+  switch (frame.type) {
+    case 'STATE_UPDATE':
+      if (payload.state) sessionStore.setVoiceState(payload.state)
+      break
+    case 'TRANSCRIPT_PARTIAL':
+      sessionStore.updatePartialTranscript(payload.text)
+      break
+    case 'TRANSCRIPT_FINAL':
+      sessionStore.setFinalTranscript(payload.text)
+      break
+    case 'CONFLICT_ALERT':
+      sessionStore.setVoiceState('conflict')
+      currentConflicts.value = payload.conflicts || []
+      conflictSuggestions.value = payload.suggestions ? payload.suggestions.map((s:any) => s.reason || s) : ['推迟至下一个可用时间', '取消原有日程']
+      speakText(payload.message || '发现时间冲突')
+      break
+    case 'SEMANTIC_RESULT':
+      if (payload.intent === 'SEARCH' && payload.search_response) {
+        sessionStore.setVoiceState('searching')
+        // 处理搜索等逻辑...
+      }
+      break
+    case 'ACTION_RESULT':
+      sessionStore.setVoiceState('success')
+      if (payload.event) {
+        calendarStore.addEvent(payload.event)
+      } else if (payload.task) {
+        // 如果是后台任务组B完成
+        showSnackbar(`已为您设置 ${payload.task.title}`)
+      } else {
+        showSnackbar(payload.message || '操作已完成')
+      }
+      setTimeout(() => sessionStore.setVoiceState('idle'), 1500)
+      break
+    case 'PLAYBACK_CONTROL':
+      if (payload.action === 'START_TTS') {
+        sessionStore.setVoiceState('tts_playing')
+        if (payload.reply_text) {
+          speakText(payload.reply_text)
+        }
+      }
+      break
+    case 'VAD_TIMEOUT_ADJUST':
+      if (payload.suggested_silence_timeout_ms) {
+        vad.setTimeout(payload.suggested_silence_timeout_ms)
+      }
+      break
+  }
+}
+
+// ----------------------------------------------------------------------
+// 录音采集与断句
+// ----------------------------------------------------------------------
+const vad = useVADController({
+  onSpeechStart: () => {},
+  onSpeechEnd: () => {
+    if (sessionStore.voiceState === 'recording') {
+      stopVoiceInput()
+    }
+  }
+})
+
+const recorder = useAudioRecorder({
+  onVolumeChange: (vol) => {
+    currentVolume.value = vol
+    vad.feedVolume(vol)
+  },
+  onChunk: (chunk, seqNum, isFinal) => {
+    ws.sendAudioChunk(chunk, sessionStore.sessionId, seqNum, isFinal)
+  }
+})
+
+function startVoiceInput() {
+  stopTTS()
+  vibrate('recording')
+  sessionStore.setVoiceState('recording')
+  
+  if (ws.state.value !== 'connected') {
+    initWsSession()
+  }
+
+  if (sessionStore.isTTSPlaying) {
+    ws.sendInterrupt(sessionStore.sessionId)
+  }
+
+  recorder.startRecording()
+  vad.reset()
+}
+
+function stopVoiceInput() {
+  recorder.stopRecording()
+  currentVolume.value = 0
+  vibrate('processing')
+  sessionStore.setVoiceState('processing')
+}
+
+function handleTapButton() {
+  if (sessionStore.isTTSPlaying) {
+    stopTTS()
+    ws.sendInterrupt(sessionStore.sessionId)
+    sessionStore.setVoiceState('idle')
+  } else if (sessionStore.voiceState === 'idle') {
+    startVoiceInput()
+  } else if (sessionStore.voiceState === 'recording') {
+    stopVoiceInput()
+  }
+}
+
+// ----------------------------------------------------------------------
+// 冲突解决
+// ----------------------------------------------------------------------
+function handleResolveConflict(suggestion: string) {
+  sessionStore.setVoiceState('processing')
+  ws.sendFrame('TEXT_INPUT', { text: suggestion }, sessionStore.sessionId)
+}
+
+function handleCancelConflict() {
+  sessionStore.setVoiceState('idle')
+  ws.sendFrame('TEXT_INPUT', { text: '取消' }, sessionStore.sessionId)
+}
+
+onMounted(() => {
+  sessionStore.startSession()
+  initWsSession()
+})
 </script>
 
 <style scoped>
@@ -94,178 +235,17 @@ function goToAssistant() {
   background-color: var(--vc-bg-base);
   color: var(--vc-text-primary);
   position: relative;
-  padding-bottom: calc(70px + var(--vc-space-md)); /* 为底部导航栏预留空间 */
+  overflow: hidden;
 }
 
-/* 顶部状态栏 */
-.default-layout__header {
-  position: sticky;
-  top: 0;
-  z-index: var(--vc-z-sticky);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--vc-space-sm) var(--vc-space-md);
-  height: 60px;
-  border-bottom: 1px solid var(--vc-border);
-}
-
-.header-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--vc-space-xs);
-}
-
-.header-brand__logo {
-  width: 26px;
-  height: 26px;
-  object-fit: contain;
-}
-
-.header-brand__title {
-  font-size: var(--vc-text-lg);
-  font-weight: var(--vc-weight-bold);
-  letter-spacing: -0.5px;
-}
-
-.header-status {
-  display: flex;
-  align-items: center;
-  gap: var(--vc-space-sm);
-}
-
-/* 主体区域 */
+/* 主体区域满屏 */
 .default-layout__main {
   flex: 1;
   width: 100%;
-  max-width: 768px; /* 居中显示，完美适配手机与平板 */
+  max-width: 768px; /* 适配平板与手机 */
   margin: 0 auto;
-  padding: var(--vc-space-md);
-}
-
-/* 底部导航栏 */
-.default-layout__nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 70px;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  border-top: 1px solid var(--vc-border);
-  z-index: var(--vc-z-sticky);
-  padding: 0 var(--vc-space-lg);
-}
-
-.nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  color: var(--vc-text-tertiary);
-  transition: all var(--vc-transition-base);
-  width: 64px;
-  height: 100%;
-}
-
-.nav-item__icon {
-  font-size: 20px;
-  transition: transform var(--vc-transition-spring);
-}
-
-.nav-item__label {
-  font-size: 10px;
-  font-weight: var(--vc-weight-medium);
-}
-
-.nav-item:hover {
-  color: var(--vc-text-secondary);
-}
-
-.nav-item--active {
-  color: var(--vc-primary-light);
-}
-
-.nav-item--active .nav-item__icon {
-  transform: scale(1.15);
-}
-
-/* 麦克风悬浮按钮 */
-.voice-fab {
-  width: 60px;
-  height: 60px;
-  position: relative;
-  margin-top: -24px;
-  z-index: var(--vc-z-fab);
-  border-radius: var(--vc-radius-full);
-}
-
-.voice-fab__circle {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, var(--vc-primary) 0%, var(--vc-accent) 100%);
-  border-radius: var(--vc-radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 15px hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.35);
-  transition: all var(--vc-transition-spring);
-  border: 2px solid var(--vc-bg-base);
-}
-
-.voice-fab__icon {
-  font-size: 26px;
-  transition: transform var(--vc-transition-spring);
-}
-
-.voice-fab__ring {
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border-radius: var(--vc-radius-full);
-  border: 2px solid var(--vc-accent-light);
-  opacity: 0;
-  transition: all var(--vc-transition-base);
-  pointer-events: none;
-}
-
-.voice-fab:hover .voice-fab__circle {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 8px 25px hsla(var(--vc-primary-h), var(--vc-primary-s), var(--vc-primary-l), 0.5);
-}
-
-.voice-fab:hover .voice-fab__icon {
-  transform: rotate(-10deg);
-}
-
-.voice-fab:active .voice-fab__circle {
-  transform: translateY(-2px) scale(0.95);
-}
-
-.voice-fab--recording .voice-fab__circle {
-  background: var(--vc-recording);
-  animation: pulse 1.5s infinite;
-}
-
-.voice-fab--recording .voice-fab__ring {
-  animation: ripple 1.5s infinite;
-  opacity: 1;
-}
-
-/* 动效定义 */
-@keyframes pulse {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 hsla(0, 35%, 52%, 0.4); }
-  70% { transform: scale(1.05); box-shadow: 0 0 0 15px hsla(0, 35%, 52%, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 hsla(0, 35%, 52%, 0); }
-}
-
-@keyframes ripple {
-  0% { transform: scale(1); opacity: 0.8; }
-  100% { transform: scale(1.4); opacity: 0; }
+  overflow-y: auto;
+  padding-bottom: 120px; /* 为悬浮 Voice Hub 留出底部空间 */
 }
 
 /* 过渡动效 */
@@ -282,5 +262,36 @@ function goToAssistant() {
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+.fade-slide-up-enter-active,
+.fade-slide-up-leave-active {
+  transition: all var(--vc-transition-fast);
+}
+
+.fade-slide-up-enter-from,
+.fade-slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* Snackbar (Toast) */
+.global-snackbar {
+  position: fixed;
+  top: var(--vc-space-xl);
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--vc-bg-surface);
+  color: var(--vc-success);
+  padding: 10px 20px;
+  border-radius: var(--vc-radius-full);
+  box-shadow: var(--vc-shadow-md);
+  font-size: var(--vc-text-sm);
+  font-weight: var(--vc-weight-medium);
+  z-index: var(--vc-z-toast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--vc-success-soft);
 }
 </style>
