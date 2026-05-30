@@ -14,7 +14,7 @@ class TodoTask(Base):
     __tablename__ = "todo_tasks"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(String(36), nullable=False, index=True)
     
     # 任务信息
     title = Column(String(500), nullable=False)
