@@ -1,6 +1,6 @@
 <template>
   <div class="center-workspace" :class="{ 'desktop-mode': isDesktop }">
-    <!-- Top 20%: Greeting & Indicators -->
+    <!-- Top: Header with greeting -->
     <header class="workspace-header">
       <div v-if="!isDesktop" class="swipe-indicators">
         <span class="indicator-text">&lt; 设置</span>
@@ -8,67 +8,103 @@
       </div>
       <div class="greeting">
         <h2 class="greeting-title">{{ greetingMessage }}</h2>
-        <p class="greeting-sub">距离下一个会议还有 {{ nextMeetingIn }}</p>
+        <p class="greeting-sub">语音日历助手为您服务</p>
       </div>
     </header>
 
-    <!-- Middle 50%: Dynamic Island / Cards -->
-    <main class="workspace-body">
-      <!-- 冲突解决卡片 -->
-      <transition name="fade-slide-up">
-        <div v-if="voiceState === 'conflict'" class="inline-conflict-card">
-          <div class="conflict-header">
-            <span class="warning-icon">⚠️</span>
-            <h3>发现时间冲突</h3>
-          </div>
-          <div class="conflict-content">
-            <div v-for="(conflict, idx) in currentConflicts" :key="idx" class="conflict-item">
-              <span class="dot"></span>
-              {{ conflict.existing_title }}
+    <!-- Middle: Chat Messages Area -->
+    <main class="workspace-chat">
+      <div class="chat-messages" ref="chatContainer">
+        <TransitionGroup name="chat-bubble">
+          <div
+            v-for="msg in sessionStore.messages"
+            :key="msg.id"
+            class="chat-message"
+            :class="`chat-message--${msg.role}`"
+          >
+            <!-- Avatar -->
+            <div class="chat-avatar">
+              <span v-if="msg.role === 'user'">👤</span>
+              <span v-else>🤖</span>
+            </div>
+            
+            <!-- Message Bubble -->
+            <div class="chat-bubble" :class="`chat-bubble--${msg.role}`">
+              <p class="chat-text">{{ msg.content }}</p>
+              <span class="chat-time">{{ formatTime(msg.timestamp) }}</span>
             </div>
           </div>
-          <div class="conflict-actions">
-            <button 
-              v-for="sug in conflictSuggestions" 
-              :key="sug" 
-              class="action-btn primary"
-              @click="$emit('resolve-conflict', sug)"
-            >
-              {{ sug }}
-            </button>
-            <button class="action-btn outline" @click="$emit('cancel-conflict')">取消</button>
+        </TransitionGroup>
+        
+        <!-- Loading indicator -->
+        <div v-if="voiceState === 'processing' || voiceState === 'searching'" class="chat-message chat-message--system">
+          <div class="chat-avatar"><span>🤖</span></div>
+          <div class="chat-bubble chat-bubble--system chat-bubble--loading">
+            <div class="typing-indicator">
+              <span></span><span></span><span></span>
+            </div>
           </div>
         </div>
-      </transition>
+      </div>
     </main>
 
-    <!-- Bottom 30%: Floating Voice Hub & Optional Text Input -->
+    <!-- Bottom: Input Area -->
     <footer class="workspace-footer">
-      <div v-if="isDesktop" class="desktop-input-container">
-        <input 
-          v-model="textInput"
-          type="text" 
-          placeholder="或者输入您的日程指令..." 
-          class="desktop-text-input"
-          @keyup.enter="submitText"
-        />
-        <button class="send-btn" @click="submitText" :disabled="!textInput.trim()">发送</button>
+      <!-- Quick Suggestions -->
+      <div v-if="voiceState === 'idle' && quickSuggestions.length" class="quick-suggestions">
+        <button
+          v-for="s in quickSuggestions"
+          :key="s"
+          class="suggestion-chip"
+          @click="$emit('send-text', s)"
+        >
+          {{ s }}
+        </button>
       </div>
 
-      <FloatingVoiceHub
-        :voice-state="voiceState"
-        :partial-transcript="partialTranscript"
-        :volume="volume"
-        @press-start="$emit('press-start')"
-        @press-end="$emit('press-end')"
-        @tap="$emit('tap-mic')"
-      />
+      <!-- Input Bar -->
+      <div class="input-bar">
+        <!-- Text Input -->
+        <div class="text-input-wrapper">
+          <input 
+            v-model="textInput"
+            type="text" 
+            placeholder="输入日程指令..." 
+            class="text-input"
+            @keyup.enter="submitText"
+            :disabled="voiceState !== 'idle'"
+          />
+          <button 
+            class="send-btn" 
+            @click="submitText" 
+            :disabled="!textInput.trim() || voiceState !== 'idle'"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Voice Button -->
+        <div class="voice-btn-wrapper">
+          <FloatingVoiceHub
+            :voice-state="voiceState"
+            :partial-transcript="partialTranscript"
+            :volume="volume"
+            @press-start="$emit('press-start')"
+            @press-end="$emit('press-end')"
+            @tap="$emit('tap-mic')"
+          />
+        </div>
+      </div>
     </footer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
+import { useSessionStore } from '@/stores/useSessionStore'
 import FloatingVoiceHub from '@/components/FloatingVoiceHub.vue'
 import type { VoiceState, ConflictItem } from '@/types/contracts'
 
@@ -90,12 +126,35 @@ const emit = defineEmits<{
   (e: 'send-text', text: string): void
 }>()
 
+const sessionStore = useSessionStore()
 const textInput = ref('')
+const chatContainer = ref<HTMLElement | null>(null)
+const quickSuggestions = ref<string[]>([
+  '帮我创建明天下午三点的会',
+  '查看今天的日程',
+  '添加买牛奶的待办'
+])
+
+// Auto scroll to bottom when new messages arrive
+watch(() => sessionStore.messages.length, async () => {
+  await nextTick()
+  if (chatContainer.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight
+  }
+})
 
 function submitText() {
-  if (textInput.value.trim()) {
+  if (textInput.value.trim() && props.voiceState === 'idle') {
     emit('send-text', textInput.value)
     textInput.value = ''
+  }
+}
+
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
   }
 }
 
@@ -105,213 +164,287 @@ const greetingMessage = computed(() => {
   if (hour < 18) return '下午好'
   return '晚上好'
 })
-
-const nextMeetingIn = computed(() => '45 分钟')
 </script>
 
 <style scoped>
 .center-workspace {
   width: 100%;
   height: 100%;
-  background-color: transparent;
+  background: linear-gradient(180deg, var(--vc-bg-base) 0%, var(--vc-bg-elevated) 100%);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-/* Top 20% */
+/* Header */
 .workspace-header {
-  flex: 0 0 20%;
-  display: flex;
-  flex-direction: column;
-  padding: env(safe-area-inset-top) var(--vc-space-xl) 0;
+  flex: 0 0 auto;
+  padding: env(safe-area-inset-top) var(--vc-space-lg) var(--vc-space-md);
 }
 
 .swipe-indicators {
   display: flex;
   justify-content: space-between;
-  padding: var(--vc-space-md) 0;
-  opacity: 0.5;
+  padding: var(--vc-space-sm) 0;
+  opacity: 0.4;
 }
 
 .indicator-text {
-  font-size: var(--vc-text-xs);
+  font-size: 11px;
   color: var(--vc-text-secondary);
-  font-weight: var(--vc-weight-bold);
-  text-transform: uppercase;
+  font-weight: 600;
   letter-spacing: 1px;
 }
 
 .greeting {
-  margin-top: auto;
-  padding-bottom: var(--vc-space-lg);
-}
-
-.desktop-mode .workspace-header {
-  padding-top: var(--vc-space-2xl); /* 桌面端没有状态栏 */
+  padding: var(--vc-space-sm) 0;
 }
 
 .greeting-title {
-  font-size: var(--vc-text-3xl);
-  font-weight: var(--vc-weight-bold);
+  font-size: 24px;
+  font-weight: 700;
   color: var(--vc-text-primary);
-  margin: 0 0 var(--vc-space-xs);
-  letter-spacing: -0.5px;
+  margin: 0;
 }
 
 .greeting-sub {
-  font-size: var(--vc-text-base);
+  font-size: 14px;
   color: var(--vc-text-secondary);
-  margin: 0;
+  margin: 4px 0 0;
 }
 
-/* Middle 50% */
-.workspace-body {
+/* Chat Area */
+.workspace-chat {
   flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--vc-space-md);
+  scroll-behavior: smooth;
+}
+
+/* Message Styles */
+.chat-message {
+  display: flex;
+  gap: var(--vc-space-sm);
+  margin-bottom: var(--vc-space-md);
+  max-width: 85%;
+}
+
+.chat-message--user {
+  align-self: flex-end;
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.chat-message--system {
+  align-self: flex-start;
+}
+
+.chat-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--vc-bg-surface);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--vc-space-lg);
-  position: relative;
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
-.inline-conflict-card {
-  width: 100%;
-  max-width: 440px;
-  background: var(--vc-bg-surface);
-  border-radius: var(--vc-radius-lg);
-  padding: var(--vc-space-lg);
-  box-shadow: var(--vc-shadow-lg);
-  border: 1px solid var(--vc-warning-soft);
-}
-
-.conflict-header {
-  display: flex;
-  align-items: center;
-  gap: var(--vc-space-sm);
-  color: var(--vc-warning);
-  margin-bottom: var(--vc-space-md);
-}
-
-.conflict-header h3 {
-  margin: 0;
-  font-size: var(--vc-text-lg);
-}
-
-.conflict-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--vc-space-sm);
-  margin-bottom: var(--vc-space-lg);
-}
-
-.conflict-item {
-  display: flex;
-  align-items: center;
-  gap: var(--vc-space-sm);
-  font-size: var(--vc-text-sm);
-  color: var(--vc-text-primary);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  background: var(--vc-warning);
-  border-radius: 50%;
-}
-
-.conflict-actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--vc-space-sm);
-}
-
-.action-btn {
-  padding: var(--vc-space-md);
-  border-radius: var(--vc-radius-md);
-  font-weight: var(--vc-weight-bold);
-  font-size: var(--vc-text-sm);
-  transition: opacity var(--vc-transition-fast);
-  cursor: pointer;
-}
-
-.action-btn:active {
-  opacity: 0.7;
-}
-
-.action-btn.primary {
-  background: var(--vc-accent);
-  color: var(--vc-text-inverse);
-  border: none;
-}
-
-.action-btn.outline {
-  background: transparent;
-  color: var(--vc-text-secondary);
-  border: 1px solid var(--vc-border);
-}
-
-/* Bottom 30% */
-.workspace-footer {
-  flex: 0 0 30%;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--vc-space-xl);
-}
-
-/* 桌面端文本输入框 */
-.desktop-input-container {
-  display: flex;
-  gap: var(--vc-space-sm);
-  width: 100%;
-  max-width: 440px;
-  padding: 0 var(--vc-space-lg);
-  z-index: 50;
-}
-
-.desktop-text-input {
-  flex: 1;
+.chat-bubble {
   padding: var(--vc-space-sm) var(--vc-space-md);
-  border: 1px solid var(--vc-divider);
-  border-radius: var(--vc-radius-full);
-  font-size: var(--vc-text-base);
+  border-radius: 16px;
+  position: relative;
+}
+
+.chat-bubble--user {
+  background: linear-gradient(135deg, var(--vc-primary), var(--vc-primary-dark));
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble--system {
+  background: var(--vc-bg-surface);
+  border: 1px solid var(--vc-border);
+  color: var(--vc-text-primary);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-bubble--loading {
+  padding: var(--vc-space-sm) var(--vc-space-lg);
+}
+
+.chat-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.chat-time {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-top: 4px;
+  display: block;
+}
+
+/* Typing Indicator */
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vc-text-secondary);
+  animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Footer */
+.workspace-footer {
+  flex: 0 0 auto;
+  padding: var(--vc-space-sm) var(--vc-space-md) env(safe-area-inset-bottom);
   background: var(--vc-bg-base);
+  border-top: 1px solid var(--vc-border);
+}
+
+/* Quick Suggestions */
+.quick-suggestions {
+  display: flex;
+  gap: var(--vc-space-sm);
+  padding: var(--vc-space-sm) 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.quick-suggestions::-webkit-scrollbar {
+  display: none;
+}
+
+.suggestion-chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--vc-bg-surface);
+  border: 1px solid var(--vc-border);
+  color: var(--vc-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.suggestion-chip:hover {
+  background: var(--vc-primary);
+  color: white;
+  border-color: var(--vc-primary);
+}
+
+/* Input Bar */
+.input-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--vc-space-sm);
+}
+
+.text-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--vc-bg-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: 24px;
+  padding: 4px 4px 4px 16px;
+}
+
+.text-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
   color: var(--vc-text-primary);
   outline: none;
-  transition: border-color var(--vc-transition-fast);
 }
 
-.desktop-text-input:focus {
-  border-color: var(--vc-accent);
-  background: var(--vc-bg-surface);
+.text-input::placeholder {
+  color: var(--vc-text-secondary);
 }
 
 .send-btn {
-  background: var(--vc-accent);
-  color: var(--vc-text-inverse);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--vc-primary);
   border: none;
-  padding: 0 var(--vc-space-lg);
-  border-radius: var(--vc-radius-full);
-  font-weight: var(--vc-weight-semibold);
+  color: white;
   cursor: pointer;
-  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: var(--vc-primary-dark);
+  transform: scale(1.05);
 }
 
 .send-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* Transitions */
-.fade-slide-up-enter-active,
-.fade-slide-up-leave-active {
-  transition: all var(--vc-transition-spring);
+.voice-btn-wrapper {
+  flex-shrink: 0;
 }
-.fade-slide-up-enter-from,
-.fade-slide-up-leave-to {
-  opacity: 0;
-  transform: translateY(20px) scale(0.95);
+
+/* Desktop Mode */
+.desktop-mode .workspace-header {
+  padding-top: var(--vc-space-2xl);
+}
+
+.desktop-mode .chat-messages {
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Animations */
+.chat-bubble-enter-active {
+  animation: bubble-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 </style>
