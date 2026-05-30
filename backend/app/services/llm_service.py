@@ -108,7 +108,7 @@ class LLMService:
         return found
 
     async def _llm_extract_intents(self, text: str, reference_time: datetime) -> Optional[List[Dict[str, Any]]]:
-        """通过 LLM 提取多意图"""
+        """通过 LLM 提取多意图（支持国产模型）"""
         prompt = f"""请分析以下用户输入，识别其中包含的所有意图。
 
 当前时间：{reference_time.isoformat()}
@@ -118,45 +118,47 @@ class LLMService:
 [{{"type": "CREATE|QUERY|MODIFY|DELETE|SEARCH|PLAN", "confidence": 0.95, "description": "简短描述"}}]
 """
         try:
-            if settings.AGENT_LLM_PROVIDER == "anthropic" and settings.ANTHROPIC_API_KEY:
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    resp = await client.post(
-                        "https://api.anthropic.com/v1/messages",
-                        headers={
-                            "x-api-key": settings.ANTHROPIC_API_KEY,
-                            "anthropic-version": "2023-06-01",
-                            "content-type": "application/json",
-                        },
-                        json={
-                            "model": settings.AGENT_LLM_FAST_MODEL,
-                            "max_tokens": 512,
-                            "messages": [{"role": "user", "content": prompt}],
-                        },
-                    )
-                    resp.raise_for_status()
-                    raw = resp.json()["content"][0]["text"]
-                    raw = raw.strip()
-                    start = raw.find("[")
-                    end = raw.rfind("]") + 1
-                    if start >= 0 and end > start:
-                        return json.loads(raw[start:end])
+            provider = settings.AGENT_LLM_PROVIDER
+            
+            # 通义千问（阿里云）
+            if provider == "alibaba" and settings.ALIBABA_API_KEY:
+                model = settings.ALIBABA_FAST_MODEL
+                base_url = settings.ALIBABA_BASE_URL
+                api_key = settings.ALIBABA_API_KEY
+            # 智谱GLM
+            elif provider == "zhipu" and settings.ZHIPU_API_KEY:
+                model = settings.ZHIPU_FAST_MODEL
+                base_url = settings.ZHIPU_BASE_URL
+                api_key = settings.ZHIPU_API_KEY
+            # 本地Ollama
             elif settings.LLM_BASE_URL and settings.LLM_MODEL:
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    resp = await client.post(
-                        f"{settings.LLM_BASE_URL}/v1/chat/completions",
-                        json={
-                            "model": settings.LLM_MODEL,
-                            "messages": [{"role": "user", "content": prompt}],
-                            "temperature": 0.1,
-                            "max_tokens": 512,
-                        },
-                    )
-                    resp.raise_for_status()
-                    raw = resp.json()["choices"][0]["message"]["content"]
-                    start = raw.find("[")
-                    end = raw.rfind("]") + 1
-                    if start >= 0 and end > start:
-                        return json.loads(raw[start:end])
+                model = settings.LLM_MODEL
+                base_url = settings.LLM_BASE_URL
+                api_key = settings.LLM_API_KEY
+            else:
+                return None
+            
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                headers = {"Content-Type": "application/json"}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                
+                resp = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.1,
+                        "max_tokens": 512,
+                    },
+                )
+                resp.raise_for_status()
+                raw = resp.json()["choices"][0]["message"]["content"]
+                start = raw.find("[")
+                end = raw.rfind("]") + 1
+                if start >= 0 and end > start:
+                    return json.loads(raw[start:end])
         except Exception:
             pass
         return None

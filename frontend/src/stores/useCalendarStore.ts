@@ -1,45 +1,23 @@
 /* ============================================================
  * Pinia Store — 日历事件与待办任务数据管理
- * 支持本地缓存、乐观更新、离线操作日志
+ *
+ * 纯数据容器：只负责存储后端下发的数据，不做任何过滤/分析。
+ * 所有数据查询（今日事件、按日期筛选等）由后端 API 完成。
  * ============================================================ */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import type { CalendarEvent, TodoTask } from '@/types/contracts'
 
 export const useCalendarStore = defineStore('calendar', () => {
-  // ── 数据 ─────────────────────────────────────────
+  // ── 数据（由后端下发） ──────────────────────────────
   const events = ref<CalendarEvent[]>([])
   const tasks = ref<TodoTask[]>([])
   const currentView = ref<'month' | 'week' | 'day'>('week')
   const selectedDate = ref<string>(new Date().toISOString().split('T')[0])
   const isLoading = ref(false)
 
-  // ── 计算属性 ─────────────────────────────────────
-  const activeEvents = computed(() =>
-    events.value.filter((e: CalendarEvent) => !e.is_deleted)
-  )
-
-  const activeTasks = computed(() =>
-    tasks.value.filter((t: TodoTask) => !t.is_deleted)
-  )
-
-  const pendingTasks = computed(() =>
-    activeTasks.value.filter((t: TodoTask) => !t.is_completed)
-  )
-
-  const todayEvents = computed(() => {
-    const today = new Date().toISOString().split('T')[0]
-    return activeEvents.value.filter((e: CalendarEvent) => e.start_time.startsWith(today))
-  })
-
-  const eventsForSelectedDate = computed(() => {
-    return activeEvents.value.filter((e: CalendarEvent) =>
-      e.start_time.startsWith(selectedDate.value)
-    )
-  })
-
-  // ── 动作 ─────────────────────────────────────────
+  // ── 动作：只做数据存取，不做分析 ────────────────────
   function addEvent(event: CalendarEvent) {
     const existingIdx = events.value.findIndex((e: CalendarEvent) => e.id === event.id)
     if (existingIdx >= 0) {
@@ -94,10 +72,12 @@ export const useCalendarStore = defineStore('calendar', () => {
     selectedDate.value = date
   }
 
+  /** 批量替换事件列表（后端查询结果整体下发） */
   function setEvents(newEvents: CalendarEvent[]) {
     events.value = newEvents
   }
 
+  /** 批量替换任务列表（后端查询结果整体下发） */
   function setTasks(newTasks: TodoTask[]) {
     tasks.value = newTasks
   }
@@ -108,11 +88,6 @@ export const useCalendarStore = defineStore('calendar', () => {
     currentView,
     selectedDate,
     isLoading,
-    activeEvents,
-    activeTasks,
-    pendingTasks,
-    todayEvents,
-    eventsForSelectedDate,
     addEvent,
     updateEvent,
     removeEvent,

@@ -10,10 +10,10 @@
     <div v-if="missingFields.length" class="clarification-card__fields">
       <span
         v-for="field in missingFields"
-        :key="field"
+        :key="typeof field === 'string' ? field : field.key"
         class="clarification-card__field-tag"
       >
-        {{ fieldLabels[field] || field }}
+        {{ typeof field === 'string' ? field : field.label }}
       </span>
     </div>
 
@@ -29,9 +29,17 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 追问卡片 — 纯展示组件
+ *
+ * missingFields 由后端下发 ready-to-display 的数据：
+ *   - 字符串格式（旧）: ["标题", "开始时间"]
+ *   - 对象格式（新）: [{key: "title", label: "标题"}, ...]
+ * 前端不做任何 key→label 映射。
+ */
 withDefaults(defineProps<{
   message?: string
-  missingFields?: string[]
+  missingFields?: Array<string | { key: string; label: string }>
 }>(), {
   message: '请补充以下信息以完成创建',
   missingFields: () => [],
@@ -41,16 +49,6 @@ defineEmits<{
   'voice-reply': []
   'skip': []
 }>()
-
-const fieldLabels: Record<string, string> = {
-  title: '标题',
-  start_time: '开始时间',
-  end_time: '结束时间',
-  location: '地点',
-  attendees: '参与者',
-  due_time: '截止时间',
-  priority: '优先级',
-}
 </script>
 
 <style scoped>

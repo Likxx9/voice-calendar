@@ -1,9 +1,12 @@
 <template>
-  <div class="event-card" :class="{ 'event-card--compact': compact }" :style="{ '--event-color': color }" @click="$emit('click')">
+  <div class="event-card" :class="[compact ? 'event-card--compact' : '', `event-card--${type}`]" :style="{ '--event-color': color }" @click="$emit('click')">
     <div class="event-card__color-bar" aria-hidden="true" />
     <div class="event-card__body">
       <div class="event-card__header">
-        <h4 class="event-card__title">{{ title }}</h4>
+        <h4 class="event-card__title">
+          <span v-if="type === 'commute'" class="commute-icon">🚗</span>
+          {{ title }}
+        </h4>
         <span v-if="hasReminder" class="event-card__reminder-icon" title="已设置独立提醒">🔔</span>
       </div>
       <div class="event-card__meta">
@@ -12,11 +15,8 @@
       </div>
       
       <!-- 上下文增强微件 (Context Widgets) -->
-      <div v-if="commuteTime || (attendees && attendees.length > 0 && !compact)" class="event-card__widgets">
-        <div v-if="commuteTime" class="widget-commute">
-          🚗 距当前位置预估 {{ commuteTime }} 分钟
-        </div>
-        <div v-if="attendees && attendees.length > 0 && !compact" class="event-card__attendees">
+      <div v-if="attendees && attendees.length > 0 && !compact" class="event-card__widgets">
+        <div class="event-card__attendees">
           <span v-for="(a, i) in attendees.slice(0, 3)" :key="i" class="event-card__avatar" :title="a">
             {{ a.charAt(0).toUpperCase() }}
           </span>
@@ -38,8 +38,8 @@ const props = withDefaults(defineProps<{
   attendees?: string[]
   color?: string
   compact?: boolean
-  commuteTime?: number // 预估通勤时间（分钟）
-  hasReminder?: boolean // 是否有独立提醒
+  type?: 'meeting' | 'commute' | 'personal'
+  hasReminder?: boolean
 }>(), {
   title: '未命名日程',
   startTime: '',
@@ -48,7 +48,7 @@ const props = withDefaults(defineProps<{
   attendees: () => [],
   color: 'var(--vc-primary)',
   compact: false,
-  commuteTime: undefined,
+  type: 'meeting',
   hasReminder: false,
 })
 
@@ -77,6 +77,22 @@ const formattedTime = computed(() => {
   z-index: var(--vc-z-card);
   position: relative;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--vc-divider);
+}
+
+/* 通勤块特有的斜线阴影填充 */
+.event-card--commute {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--vc-bg-base),
+    var(--vc-bg-base) 10px,
+    var(--vc-bg-surface) 10px,
+    var(--vc-bg-surface) 20px
+  );
+  border: 1px dashed var(--vc-text-tertiary);
+}
+.event-card--commute .event-card__color-bar {
+  opacity: 0.5;
 }
 
 .event-card:hover {
@@ -110,6 +126,13 @@ const formattedTime = computed(() => {
   color: var(--vc-text-primary);
   margin: 0;
   line-height: var(--vc-leading-tight);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.commute-icon {
+  font-size: 14px;
 }
 
 .event-card__reminder-icon {
@@ -127,6 +150,7 @@ const formattedTime = computed(() => {
 .event-card__location {
   font-size: var(--vc-text-xs);
   color: var(--vc-text-secondary);
+  font-family: var(--vc-font-mono);
 }
 
 /* 增强微件样式 */
@@ -135,14 +159,6 @@ const formattedTime = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.widget-commute {
-  font-size: 11px;
-  color: var(--vc-text-secondary);
-  background-color: var(--vc-bg-base);
-  padding: 2px 6px;
-  border-radius: var(--vc-radius-sm);
 }
 
 .event-card__attendees {
@@ -155,7 +171,7 @@ const formattedTime = computed(() => {
   width: 20px;
   height: 20px;
   border-radius: var(--vc-radius-full);
-  background: var(--vc-primary-light);
+  background: var(--vc-text-secondary);
   color: var(--vc-text-inverse);
   font-size: 10px;
   font-weight: var(--vc-weight-bold);

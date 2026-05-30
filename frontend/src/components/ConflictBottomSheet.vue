@@ -26,7 +26,7 @@
           <div class="conflict-list">
             <div v-for="(conflict, index) in conflicts" :key="index" class="conflict-item">
               <span class="conflict-dot"></span>
-              <span class="conflict-text">{{ conflict.title }} ({{ formatTime(conflict.start_time) }} - {{ formatTime(conflict.end_time) }})</span>
+              <span class="conflict-text">{{ conflict.existing_title }} ({{ formatTime(conflict.overlap_start) }} - {{ formatTime(conflict.overlap_end) }})</span>
             </div>
           </div>
 

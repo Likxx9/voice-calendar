@@ -53,10 +53,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
+import type { VoiceState } from '@/types/contracts'
 
 const props = defineProps<{
-  voiceState: 'idle' | 'recording' | 'processing' | 'searching' | 'success' | 'tts_playing' | 'clarifying' | 'conflict'
+  voiceState: VoiceState
   partialTranscript: string
   volume: number
 }>()

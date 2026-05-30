@@ -22,9 +22,9 @@
       <div v-if="sessionStore.voiceState === 'clarifying'" class="inline-card-container">
         <ClarificationCard
           :message="clarificationMessage"
-          :missingFields="clarificationMissingFields"
+          :missingFields="clarificationFields"
           @voice-reply="startVoiceInput"
-          @skip="handleSkipClarification"
+          @skip="sendTextToBackend('跳过')"
         />
       </div>
 
@@ -33,14 +33,12 @@
         <ConflictNegotiation
           :conflicts="currentConflicts"
           :suggestions="conflictSuggestions"
-          @select="handleResolveConflict"
+          @select="(s: string) => sendTextToBackend(s)"
           @voice-resolve="startVoiceInput"
-          @force-create="handleForceCreate"
-          @cancel="handleCancelConflict"
+          @force-create="sendTextToBackend('强制创建')"
+          @cancel="sendTextToBackend('取消')"
         />
       </div>
-
-
 
       <!-- 实时联网搜索卡片 (M9 Web Search Agent) -->
       <div v-if="sessionStore.voiceState === 'searching'" class="inline-card-container">
@@ -48,8 +46,9 @@
           :query="currentSearchQuery"
           :status="currentSearchStatus"
           :events="currentSearchEvents"
+          :resultCountDisplay="currentSearchResultCountDisplay"
           @add-event="handleSearchAddEvent"
-          @retry="handleSearchRetry"
+          @retry="sendTextToBackend(currentSearchQuery)"
         />
       </div>
     </section>
@@ -62,14 +61,14 @@
           <!-- 键盘键入形态：仅在闲置/未录音/未处理时展示 -->
           <div v-if="sessionStore.voiceState === 'idle'" class="morph-input-bar">
             <span class="morph-input-icon">⌨️</span>
-            <input 
-              type="text" 
-              class="keyboard-text-input" 
-              placeholder="输入您的日程指令... (例如：明早九点开会)" 
+            <input
+              type="text"
+              class="keyboard-text-input"
+              placeholder="输入您的日程指令... (例如：明早九点开会)"
               v-model="keyboardInputText"
               @keyup.enter="handleKeyboardSubmit"
             />
-            <button 
+            <button
               class="morph-input-submit"
               :disabled="!keyboardInputText.trim()"
               @click="handleKeyboardSubmit"
@@ -100,13 +99,13 @@
         />
       </div>
 
-      <!-- 快捷智能回复引导词 -->
-      <div class="footer-suggestions" v-if="sessionStore.voiceState === 'idle'">
-        <button 
-          v-for="s in quickSuggestions" 
-          :key="s" 
+      <!-- 快捷智能回复引导词（由后端动态下发，前端不做硬编码） -->
+      <div class="footer-suggestions" v-if="sessionStore.voiceState === 'idle' && quickSuggestions.length">
+        <button
+          v-for="s in quickSuggestions"
+          :key="s"
           class="suggestion-pill"
-          @click="handleQuickInput(s)"
+          @click="sendTextToBackend(s)"
         >
           {{ s }}
         </button>
@@ -166,7 +165,7 @@ import ConflictNegotiation from '@/modules/stateMachine/ConflictNegotiation.vue'
 import TTSControlBar from '@/modules/sensory/TTSControlBar.vue'
 import SearchAgentCard from '@/modules/stateMachine/SearchAgentCard.vue'
 
-import type { ConflictItem, WebSearchEvent, WSFrame, AgentMetadata } from '@/types/contracts'
+import type { WebSearchEvent, WSFrame } from '@/types/contracts'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
@@ -176,22 +175,21 @@ const { speakText, stop: stopTTS } = useTTSPlayer()
 
 const flowScrollContainer = ref<HTMLElement | null>(null)
 
-// M9 Web Search Agent 状态
+// ── 所有展示数据均由后端下发，前端仅持有引用 ─────────
+const quickSuggestions = ref<string[]>([])
+
+// 搜索卡片数据（后端下发 ready-to-display）
 const currentSearchQuery = ref('')
 const currentSearchStatus = ref<'searching' | 'parsing' | 'results'>('searching')
 const currentSearchEvents = ref<WebSearchEvent[]>([])
+const currentSearchResultCountDisplay = ref('')
 
-const quickSuggestions = [
-  '帮我创建明天下午三点的会',
-  '联网检索2026年杭州的动漫展',
-  '搜一下上海最近的实践活动',
-  '添加买牛奶的待办'
-]
-
-// State for dynamically bound components
-const currentConflicts = ref<ConflictItem[]>([])
+// 冲突卡片数据（后端下发 ready-to-display）
+const currentConflicts = ref<any[]>([])
 const conflictSuggestions = ref<string[]>([])
-const clarificationMissingFields = ref<string[]>([])
+
+// 追问卡片数据（后端下发 ready-to-display）
+const clarificationFields = ref<any[]>([])
 const clarificationMessage = ref('')
 
 function goHome() {
@@ -207,7 +205,7 @@ function scrollToBottom() {
 }
 
 // ----------------------------------------------------------------------
-// 真实通信：WebSocket 接入 (M2)
+// WebSocket 接入 — 前端仅做数据接收与展示，不做任何分析
 // ----------------------------------------------------------------------
 const wsUrl = `ws://${window.location.hostname}:8000/api/v1/voice/stream`
 const ws = useWebSocket({
@@ -224,7 +222,7 @@ function initWsSession() {
   ws.connect(sessionStore.sessionId)
   setTimeout(() => {
     if (ws.state.value === 'connected') {
-      ws.sendFrame('SESSION_INIT', { 
+      ws.sendFrame('SESSION_INIT', {
         session_id: sessionStore.sessionId,
         user_id: sessionStore.currentUser?.email || 'user-001'
       }, sessionStore.sessionId)
@@ -232,68 +230,93 @@ function initWsSession() {
   }, 500)
 }
 
+/**
+ * WebSocket 消息处理 — 纯数据绑定，无任何分析逻辑
+ *
+ * 后端发送的所有数据均为 ready-to-display 格式，
+ * 前端只负责将数据绑定到对应的 UI 组件。
+ */
 function handleWebSocketMessage(frame: WSFrame) {
   const payload = frame.payload as any
+
   switch (frame.type) {
     case 'STATE_UPDATE':
+      // 后端控制所有状态转换，前端只执行
       if (payload.state) sessionStore.setVoiceState(payload.state)
       if (payload.message) {
         sessionStore.addMessage({ role: 'system', content: payload.message, type: 'text' })
         scrollToBottom()
       }
+      // 后端下发快捷建议
+      if (payload.quick_suggestions) {
+        quickSuggestions.value = payload.quick_suggestions
+      }
       break
+
     case 'TRANSCRIPT_PARTIAL':
       sessionStore.updatePartialTranscript(payload.text)
       break
+
     case 'TRANSCRIPT_FINAL':
       sessionStore.setFinalTranscript(payload.text)
       break
+
     case 'CLARIFICATION_ASK':
+      // 后端已构建好 display-ready 的字段数据
       sessionStore.setVoiceState('clarifying')
-      clarificationMissingFields.value = payload.missing_fields || []
+      clarificationFields.value = payload.missing_fields || []
       clarificationMessage.value = payload.message || '请补充信息'
       sessionStore.addMessage({ role: 'system', content: clarificationMessage.value, type: 'clarification' })
       speakText(clarificationMessage.value)
       scrollToBottom()
       break
+
     case 'CONFLICT_ALERT':
+      // 后端已构建好 display-ready 的冲突和建议数据
       sessionStore.setVoiceState('conflict')
       currentConflicts.value = payload.conflicts || []
-      conflictSuggestions.value = payload.suggestions ? payload.suggestions.map((s:any) => s.reason) : []
+      conflictSuggestions.value = (payload.suggestions || []).map((s: any) =>
+        typeof s === 'string' ? s : s.text || s.reason || ''
+      )
       sessionStore.addMessage({ role: 'system', content: payload.message, type: 'conflict' })
       speakText(payload.message)
       scrollToBottom()
       break
+
     case 'SEMANTIC_RESULT':
+      // 后端已构建好完整搜索结果，前端直接绑定
       if (payload.intent === 'SEARCH' && payload.search_response) {
         sessionStore.setVoiceState('searching')
-        currentSearchQuery.value = payload.search_response.search_raw_query || ''
-        currentSearchStatus.value = payload.search_response.status === 'success' ? 'results' : 'searching'
-        currentSearchEvents.value = (payload.search_response.extracted_events || []).map((e: any) => ({
-          title: e.title || '',
-          start_time: e.start_time || '',
-          end_time: e.end_time || '',
-          location: e.location || '',
-          description: e.description || '',
-          source_url: e.source_url || '',
-        }))
+        const sr = payload.search_response
+        currentSearchQuery.value = sr.search_raw_query || ''
+        currentSearchStatus.value = sr.status === 'success' ? 'results' : 'searching'
+        currentSearchEvents.value = sr.extracted_events || []
+        currentSearchResultCountDisplay.value = sr.result_count_display || ''
         sessionStore.addMessage({
           role: 'system',
-          content: payload.search_response.reply_text || '搜索完成',
+          content: sr.reply_text || '搜索完成',
           type: 'search',
         })
         scrollToBottom()
       }
       break
+
     case 'ACTION_RESULT':
+      // 后端已构建好事件数据，前端直接存入 store
       sessionStore.setVoiceState('success')
       sessionStore.addMessage({ role: 'system', content: payload.message, type: 'result' })
       if (payload.event) {
         calendarStore.addEvent(payload.event)
       }
+      if (payload.events) {
+        for (const evt of payload.events) {
+          calendarStore.addEvent(evt)
+        }
+      }
       scrollToBottom()
-      setTimeout(() => sessionStore.setVoiceState('idle'), 2000)
+      // 不再在前端 setTimeout，后端会发送 STATE_UPDATE 来恢复 idle
       break
+
     case 'PLAYBACK_CONTROL':
       if (payload.action === 'START_TTS') {
         sessionStore.setVoiceState('tts_playing')
@@ -302,19 +325,21 @@ function handleWebSocketMessage(frame: WSFrame) {
         }
       }
       break
+
     case 'VAD_TIMEOUT_ADJUST':
       if (payload.suggested_silence_timeout_ms) {
         vad.setTimeout(payload.suggested_silence_timeout_ms)
       }
       break
+
     case 'TTS_AUDIO_CHUNK':
-      // 真实流式音频处理预留接口，当前直接使用前端 TTSPlayer 的 Web Speech API
+      // 预留流式音频接口
       break
   }
 }
 
 // ----------------------------------------------------------------------
-// 真实通信：录音采集与断句 (M1)
+// 录音采集与断句 — 纯硬件交互，不含分析
 // ----------------------------------------------------------------------
 const vad = useVADController({
   onSpeechStart: () => {},
@@ -338,7 +363,7 @@ function startVoiceInput() {
   stopTTS()
   vibrate('recording')
   sessionStore.setVoiceState('recording')
-  
+
   if (ws.state.value !== 'connected') {
     initWsSession()
   }
@@ -370,83 +395,36 @@ function handleTapButton() {
 }
 
 // ----------------------------------------------------------------------
-// 文本交互与快捷建议
+// 统一文本发送 — 所有用户交互直接转发后端，前端不做任何处理
 // ----------------------------------------------------------------------
 const keyboardInputText = ref('')
 
+function sendTextToBackend(text: string) {
+  if (!text.trim()) return
+  stopTTS()
+  sessionStore.setVoiceState('processing')
+  sessionStore.setFinalTranscript(text)
+  sessionStore.addMessage({ role: 'user', content: text, type: 'text' })
+  scrollToBottom()
+  ws.sendFrame('TEXT_INPUT', { text }, sessionStore.sessionId)
+}
+
 function handleKeyboardSubmit() {
   if (!keyboardInputText.value.trim()) return
-  const text = keyboardInputText.value.trim()
+  sendTextToBackend(keyboardInputText.value.trim())
   keyboardInputText.value = ''
-  
-  stopTTS()
-  sessionStore.setVoiceState('processing')
-  sessionStore.setFinalTranscript(text)
-  
-  sessionStore.addMessage({ role: 'user', content: text, type: 'text' })
-  scrollToBottom()
-  
-  ws.sendFrame('TEXT_INPUT', { text }, sessionStore.sessionId)
-}
-
-function handleQuickInput(text: string) {
-  stopTTS()
-  sessionStore.setVoiceState('processing')
-  sessionStore.setFinalTranscript(text)
-  
-  sessionStore.addMessage({ role: 'user', content: text, type: 'text' })
-  scrollToBottom()
-  
-  ws.sendFrame('TEXT_INPUT', { text }, sessionStore.sessionId)
 }
 
 // ----------------------------------------------------------------------
-// 组件事件：追问与冲突
-// ----------------------------------------------------------------------
-function handleSkipClarification() {
-  ws.sendFrame('TEXT_INPUT', { text: '跳过' }, sessionStore.sessionId)
-}
-
-function handleResolveConflict(suggestion: string) {
-  ws.sendFrame('TEXT_INPUT', { text: suggestion }, sessionStore.sessionId)
-}
-
-function handleForceCreate() {
-  ws.sendFrame('TEXT_INPUT', { text: '强制创建' }, sessionStore.sessionId)
-}
-
-function handleCancelConflict() {
-  ws.sendFrame('TEXT_INPUT', { text: '取消' }, sessionStore.sessionId)
-}
-
-// ----------------------------------------------------------------------
-// 搜索代理 (Mock)
+// 搜索事件添加 — 将原始数据发送后端处理，前端不构造事件
 // ----------------------------------------------------------------------
 function handleSearchAddEvent(event: WebSearchEvent) {
   vibrate('success')
-  calendarStore.addEvent({
-    id: `ev-search-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    title: event.title,
-    start_time: event.start_time,
-    end_time: event.end_time,
-    location: event.location,
-    calendar_id: 'work',
-    calendar_name: '工作',
-    color: '#8B5CF6',
-    is_deleted: false,
-    version_tag: 'v1',
-    voice_raw_text: currentSearchQuery.value,
-    created_at: new Date().toISOString()
-  })
-  
-  const textFeedback = `已成功将“${event.title}”添加入您的日历日程！`
-  sessionStore.addMessage({ role: 'system', content: textFeedback, type: 'result' })
-  speakText(textFeedback)
-  scrollToBottom()
-}
-
-function handleSearchRetry() {
-  ws.sendFrame('TEXT_INPUT', { text: currentSearchQuery.value }, sessionStore.sessionId)
+  // 前端不再本地构造 CalendarEvent，而是发送给后端创建
+  ws.sendFrame('SEARCH_ADD_EVENT', {
+    event: event,
+    search_query: currentSearchQuery.value,
+  }, sessionStore.sessionId)
 }
 
 function speakLastMessage() {
@@ -464,10 +442,10 @@ const latestSystemMessage = computed(() => {
 onMounted(() => {
   sessionStore.startSession()
   initWsSession()
-  
+
   sessionStore.addMessage({
     role: 'system',
-    content: '你好，我是你的语音日程管家。按住屏幕中下方麦克风并说话即可添加、修改或查询日程。例如你可以说：“帮我创建明天下午三点的项目评审会”',
+    content: '你好，我是你的语音日程管家。按住屏幕中下方麦克风并说话即可添加、修改或查询日程。例如你可以说："帮我创建明天下午三点的项目评审会"',
     type: 'text'
   })
   scrollToBottom()
@@ -478,7 +456,7 @@ onMounted(() => {
 .conversation-view {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px); /* 减去 Tab 导航高度 */
+  height: calc(100vh - 80px);
   height: calc(100dvh - 80px);
   gap: var(--vc-space-md);
   position: relative;
@@ -528,8 +506,6 @@ onMounted(() => {
   margin: var(--vc-space-sm) 0;
 }
 
-
-
 /* 底部操作区 */
 .conversation-footer {
   border-top: 1px solid var(--vc-border);
@@ -540,7 +516,7 @@ onMounted(() => {
   gap: var(--vc-space-md);
 }
 
-/* 形态切换容器 (Morph Input Block) */
+/* 形态切换容器 */
 .footer-input-morph {
   width: 100%;
   min-height: 52px;

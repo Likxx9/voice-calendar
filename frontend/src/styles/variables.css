@@ -1,47 +1,55 @@
 /* ============================================================
-   Voice Calendar — CSS Design Tokens (Business Elite Edition)
+   Voice Calendar — CSS Design Tokens (Business Swipe Paging Edition)
    ============================================================ */
 
 :root {
   /* ── 色彩令牌 ─────────────────────────── */
-  /* 主色调 — 领英蓝 (Professional Blue) */
-  --vc-primary-h: 211;
-  --vc-primary-s: 90%;
-  --vc-primary-l: 40%;
-  --vc-primary: #0A66C2;
-  --vc-primary-light: hsl(211, 90%, 50%);
-  --vc-primary-dark: hsl(211, 90%, 30%);
-  --vc-primary-glow: hsla(211, 90%, 40%, 0.2);
+  /* 主色调 — 深空黑 (Dark Space Black) */
+  --vc-primary-h: 0;
+  --vc-primary-s: 0%;
+  --vc-primary-l: 10%;
+  --vc-primary: #1A1A1A;
+  --vc-primary-light: hsl(0, 0%, 25%);
+  --vc-primary-dark: hsl(0, 0%, 5%);
+  --vc-primary-glow: rgba(26, 26, 26, 0.2);
+
+  /* 点缀色 — 效率蓝 (Efficiency Blue) */
+  --vc-accent-h: 210;
+  --vc-accent-s: 100%;
+  --vc-accent-l: 50%;
+  --vc-accent: #007AFF;
+  --vc-accent-light: hsl(210, 100%, 65%);
+  --vc-accent-glow: rgba(0, 122, 255, 0.3);
 
   /* 背景层级 */
-  --vc-bg-base: #F4F5F7;
-  --vc-bg-surface: #FFFFFF;
+  --vc-bg-base: #F2F2F7; /* 极光灰 */
+  --vc-bg-surface: #FFFFFF; /* 纯净白 */
   --vc-bg-elevated: #FFFFFF;
-  --vc-bg-overlay: rgba(29, 29, 31, 0.4);
+  --vc-bg-overlay: rgba(0, 0, 0, 0.5);
   --vc-bg-glass: rgba(255, 255, 255, 0.85);
 
   /* 文字层级 */
-  --vc-text-primary: #1D1D1F;
-  --vc-text-secondary: #86868B;
-  --vc-text-tertiary: #A1A1A6;
+  --vc-text-primary: #1A1A1A;
+  --vc-text-secondary: #8E8E93; /* 钛金属灰 */
+  --vc-text-tertiary: #C7C7CC;
   --vc-text-inverse: #FFFFFF;
 
   /* 状态色 */
-  --vc-warning: #F56A00;
-  --vc-warning-soft: rgba(245, 106, 0, 0.1);
+  --vc-warning: #FF9500; /* 琥珀橙 */
+  --vc-warning-soft: rgba(255, 149, 0, 0.1);
   --vc-success: #34C759;
   --vc-success-soft: rgba(52, 199, 89, 0.1);
   --vc-danger: #FF3B30;
-  --vc-info: #0A66C2;
+  --vc-info: #007AFF;
 
   /* 录音状态色 */
-  --vc-recording: #0A66C2;
-  --vc-recording-glow: rgba(10, 102, 194, 0.2);
+  --vc-recording: #007AFF;
+  --vc-recording-glow: rgba(0, 122, 255, 0.2);
 
   /* 边框与分割 */
-  --vc-border: rgba(29, 29, 31, 0.08);
-  --vc-border-active: #0A66C2;
-  --vc-divider: rgba(29, 29, 31, 0.05);
+  --vc-border: rgba(60, 60, 67, 0.1);
+  --vc-border-active: #007AFF;
+  --vc-divider: rgba(60, 60, 67, 0.05);
 
   /* ── 间距系统（4px 基数） ────────────────────────── */
   --vc-space-xs: 4px;
@@ -59,8 +67,8 @@
   --vc-radius-full: 9999px;
 
   /* ── 字体 ────────────────────────────────────────── */
-  --vc-font-sans: 'SF Pro Display', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --vc-font-mono: ui-monospace, 'SF Mono', Consolas, monospace;
+  --vc-font-sans: 'SF Pro', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --vc-font-mono: 'SF Pro Rounded', ui-monospace, 'SF Mono', Consolas, monospace;
 
   /* 字号 */
   --vc-text-xs: 0.75rem;     /* 12px */
@@ -84,13 +92,14 @@
   --vc-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
   --vc-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
   --vc-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.08);
-  --vc-shadow-glow: 0 4px 12px rgba(10, 102, 194, 0.2);
-  --vc-shadow-recording: 0 0 0 6px rgba(10, 102, 194, 0.15);
+  --vc-shadow-glow: 0 4px 12px rgba(26, 26, 26, 0.15);
+  --vc-shadow-recording: 0 0 0 6px rgba(0, 122, 255, 0.15);
 
   /* ── 过渡 ────────────────────────────────────────── */
   --vc-transition-fast: 150ms ease;
   --vc-transition-base: 200ms ease;
   --vc-transition-bottom-sheet: 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --vc-transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1); /* Physical spring */
 
   /* ── 层级 z-index ────────────────────────────────── */
   --vc-z-timeline: 10;
@@ -98,6 +107,7 @@
   --vc-z-voice-hub: 100;
   --vc-z-conflict-panel: 200;
   --vc-z-toast: 300;
+  --vc-z-sticky: 400;
 
   /* ── 毛玻璃 ──────────────────────────────────────── */
   --vc-glass-blur: 24px;

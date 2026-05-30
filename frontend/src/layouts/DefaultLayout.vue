@@ -1,32 +1,48 @@
 <template>
-  <div class="default-layout">
-    <!-- 主体区域：永远是核心内容（如日历时间轴） -->
-    <main class="default-layout__main">
-      <router-view v-slot="{ Component }">
-        <transition name="fade-slide" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
-    </main>
+  <div 
+    class="default-layout"
+    @touchstart="onTouchStart"
+    @touchmove="onTouchMove"
+    @touchend="onTouchEnd"
+    @mousedown="onMouseDown"
+    @mousemove="onMouseMove"
+    @mouseup="onMouseUp"
+    @mouseleave="onMouseUp"
+  >
+    <!-- 响应式容器：移动端滑动 / 桌面端三栏 -->
+    <div 
+      class="responsive-container" 
+      :style="containerStyle"
+      :class="{ 'is-animating': !isSwiping && !isDesktop, 'is-desktop': isDesktop }"
+    >
+      <!-- 左侧屏: 设置 -->
+      <div class="page-wrapper page-left">
+        <SettingsPanel />
+      </div>
 
-    <!-- 全局悬浮 AI 语音中枢 -->
-    <FloatingVoiceHub
-      :voice-state="sessionStore.voiceState"
-      :partial-transcript="sessionStore.partialTranscript"
-      :volume="currentVolume"
-      @press-start="startVoiceInput"
-      @press-end="stopVoiceInput"
-      @tap="handleTapButton"
-    />
+      <!-- 中心屏: 工作台 -->
+      <div class="page-wrapper page-center">
+        <CenterWorkspace 
+          :voice-state="sessionStore.voiceState"
+          :partial-transcript="sessionStore.partialTranscript"
+          :volume="currentVolume"
+          :current-conflicts="currentConflicts"
+          :conflict-suggestions="conflictSuggestions"
+          :is-desktop="isDesktop"
+          @press-start="startVoiceInput"
+          @press-end="stopVoiceInput"
+          @tap-mic="handleTapButton"
+          @resolve-conflict="handleResolveConflict"
+          @cancel-conflict="handleCancelConflict"
+          @send-text="handleTextSubmit"
+        />
+      </div>
 
-    <!-- 全局时间冲突解决面板 (Bottom Sheet) -->
-    <ConflictBottomSheet
-      :is-visible="sessionStore.voiceState === 'conflict'"
-      :conflicts="currentConflicts"
-      :suggestions="conflictSuggestions"
-      @resolve="handleResolveConflict"
-      @cancel="handleCancelConflict"
-    />
+      <!-- 右侧屏: 日历 -->
+      <div class="page-wrapper page-right">
+        <RightCalendar />
+      </div>
+    </div>
 
     <!-- 轻量级 Snackbar (静默任务完成提示) -->
     <transition name="fade-slide-up">
@@ -38,8 +54,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { useSessionStore } from '@/stores/useSessionStore'
 import { useCalendarStore } from '@/stores/useCalendarStore'
 import { useHapticFeedback } from '@/composables/useHapticFeedback'
@@ -48,8 +64,9 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
 import { useVADController } from '@/composables/useVADController'
 
-import FloatingVoiceHub from '@/components/FloatingVoiceHub.vue'
-import ConflictBottomSheet from '@/components/ConflictBottomSheet.vue'
+import SettingsPanel from '@/views/SettingsPanel.vue'
+import CenterWorkspace from '@/views/CenterWorkspace.vue'
+import RightCalendar from '@/views/RightCalendar.vue'
 import type { ConflictItem, WSFrame } from '@/types/contracts'
 
 const sessionStore = useSessionStore()
@@ -57,32 +74,97 @@ const calendarStore = useCalendarStore()
 const { vibrate } = useHapticFeedback()
 const { speakText, stop: stopTTS } = useTTSPlayer()
 
+// ── Responsive Logic ──────────────────────────────────────────────────
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+
+// ── Swipe Logic ────────────────────────────────────────────────────────
+const currentPage = ref(1) // 0: Left, 1: Center, 2: Right
+const isSwiping = ref(false)
+const startX = ref(0)
+const currentDeltaX = ref(0)
+const viewWidth = typeof window !== 'undefined' ? window.innerWidth : 375
+
+function onTouchStart(e: TouchEvent) {
+  handleStart(e.touches[0].clientX)
+}
+function onMouseDown(e: MouseEvent) {
+  handleStart(e.clientX)
+}
+function handleStart(clientX: number) {
+  if (isDesktop.value) return
+  isSwiping.value = true
+  startX.value = clientX
+  currentDeltaX.value = 0
+}
+
+function onTouchMove(e: TouchEvent) {
+  handleMove(e.touches[0].clientX)
+}
+function onMouseMove(e: MouseEvent) {
+  if (!isSwiping.value) return
+  handleMove(e.clientX)
+}
+function handleMove(clientX: number) {
+  if (!isSwiping.value || isDesktop.value) return
+  const delta = clientX - startX.value
+  
+  if (currentPage.value === 0 && delta > 0) {
+    currentDeltaX.value = delta * 0.3
+  } else if (currentPage.value === 2 && delta < 0) {
+    currentDeltaX.value = delta * 0.3
+  } else {
+    currentDeltaX.value = delta
+  }
+}
+
+function onTouchEnd() {
+  handleEnd()
+}
+function onMouseUp() {
+  if (isSwiping.value) handleEnd()
+}
+function handleEnd() {
+  if (isDesktop.value) return
+  isSwiping.value = false
+  const threshold = viewWidth * 0.25 
+  
+  if (currentDeltaX.value > threshold && currentPage.value > 0) {
+    currentPage.value -= 1
+  } else if (currentDeltaX.value < -threshold && currentPage.value < 2) {
+    currentPage.value += 1
+  }
+  
+  currentDeltaX.value = 0
+}
+
+const containerStyle = computed(() => {
+  if (isDesktop.value) {
+    return { transform: 'none' }
+  }
+  const baseOffset = -currentPage.value * 100
+  const swipeOffset = (currentDeltaX.value / viewWidth) * 100
+  const totalOffset = baseOffset + swipeOffset
+  return {
+    transform: `translate3d(${totalOffset}vw, 0, 0)`
+  }
+})
+
+// ── Voice & Logic ────────────────────────────────────────────────────────
 const currentVolume = ref(0)
 const snackbarMessage = ref('')
-
-// Conflict State
 const currentConflicts = ref<ConflictItem[]>([])
 const conflictSuggestions = ref<string[]>([])
 
 function showSnackbar(msg: string) {
   snackbarMessage.value = msg
-  setTimeout(() => {
-    snackbarMessage.value = ''
-  }, 3000)
+  setTimeout(() => { snackbarMessage.value = '' }, 3000)
 }
 
-// ----------------------------------------------------------------------
-// WebSocket 通信 (Agent 编排层通信)
-// ----------------------------------------------------------------------
 const wsUrl = `ws://${window.location.hostname}:8000/api/v1/voice/stream`
 const ws = useWebSocket({
   url: wsUrl,
-  onStateChange: (state) => {
-    sessionStore.setConnectionState(state)
-  },
-  onMessage: (frame: WSFrame) => {
-    handleWebSocketMessage(frame)
-  }
+  onStateChange: (state) => sessionStore.setConnectionState(state),
+  onMessage: (frame: WSFrame) => handleWebSocketMessage(frame)
 })
 
 function initWsSession() {
@@ -112,52 +194,23 @@ function handleWebSocketMessage(frame: WSFrame) {
     case 'CONFLICT_ALERT':
       sessionStore.setVoiceState('conflict')
       currentConflicts.value = payload.conflicts || []
-      conflictSuggestions.value = payload.suggestions ? payload.suggestions.map((s:any) => s.reason || s) : ['推迟至下一个可用时间', '取消原有日程']
+      conflictSuggestions.value = payload.suggestions ? payload.suggestions.map((s:any) => s.reason || s) : ['推迟至下一个可用时间', '取消']
       speakText(payload.message || '发现时间冲突')
-      break
-    case 'SEMANTIC_RESULT':
-      if (payload.intent === 'SEARCH' && payload.search_response) {
-        sessionStore.setVoiceState('searching')
-        // 处理搜索等逻辑...
-      }
+      if (!isDesktop.value && currentPage.value !== 1) currentPage.value = 1
       break
     case 'ACTION_RESULT':
       sessionStore.setVoiceState('success')
-      if (payload.event) {
-        calendarStore.addEvent(payload.event)
-      } else if (payload.task) {
-        // 如果是后台任务组B完成
-        showSnackbar(`已为您设置 ${payload.task.title}`)
-      } else {
-        showSnackbar(payload.message || '操作已完成')
-      }
+      if (payload.event) calendarStore.addEvent(payload.event)
+      showSnackbar(payload.message || '操作已完成')
       setTimeout(() => sessionStore.setVoiceState('idle'), 1500)
-      break
-    case 'PLAYBACK_CONTROL':
-      if (payload.action === 'START_TTS') {
-        sessionStore.setVoiceState('tts_playing')
-        if (payload.reply_text) {
-          speakText(payload.reply_text)
-        }
-      }
-      break
-    case 'VAD_TIMEOUT_ADJUST':
-      if (payload.suggested_silence_timeout_ms) {
-        vad.setTimeout(payload.suggested_silence_timeout_ms)
-      }
       break
   }
 }
 
-// ----------------------------------------------------------------------
-// 录音采集与断句
-// ----------------------------------------------------------------------
 const vad = useVADController({
   onSpeechStart: () => {},
   onSpeechEnd: () => {
-    if (sessionStore.voiceState === 'recording') {
-      stopVoiceInput()
-    }
+    if (sessionStore.voiceState === 'recording') stopVoiceInput()
   }
 })
 
@@ -166,24 +219,14 @@ const recorder = useAudioRecorder({
     currentVolume.value = vol
     vad.feedVolume(vol)
   },
-  onChunk: (chunk, seqNum, isFinal) => {
-    ws.sendAudioChunk(chunk, sessionStore.sessionId, seqNum, isFinal)
-  }
+  onChunk: (chunk, seqNum, isFinal) => ws.sendAudioChunk(chunk, sessionStore.sessionId, seqNum, isFinal)
 })
 
 function startVoiceInput() {
   stopTTS()
   vibrate('recording')
   sessionStore.setVoiceState('recording')
-  
-  if (ws.state.value !== 'connected') {
-    initWsSession()
-  }
-
-  if (sessionStore.isTTSPlaying) {
-    ws.sendInterrupt(sessionStore.sessionId)
-  }
-
+  if (ws.state.value !== 'connected') initWsSession()
   recorder.startRecording()
   vad.reset()
 }
@@ -196,20 +239,10 @@ function stopVoiceInput() {
 }
 
 function handleTapButton() {
-  if (sessionStore.isTTSPlaying) {
-    stopTTS()
-    ws.sendInterrupt(sessionStore.sessionId)
-    sessionStore.setVoiceState('idle')
-  } else if (sessionStore.voiceState === 'idle') {
-    startVoiceInput()
-  } else if (sessionStore.voiceState === 'recording') {
-    stopVoiceInput()
-  }
+  if (sessionStore.voiceState === 'idle') startVoiceInput()
+  else if (sessionStore.voiceState === 'recording') stopVoiceInput()
 }
 
-// ----------------------------------------------------------------------
-// 冲突解决
-// ----------------------------------------------------------------------
 function handleResolveConflict(suggestion: string) {
   sessionStore.setVoiceState('processing')
   ws.sendFrame('TEXT_INPUT', { text: suggestion }, sessionStore.sessionId)
@@ -220,6 +253,14 @@ function handleCancelConflict() {
   ws.sendFrame('TEXT_INPUT', { text: '取消' }, sessionStore.sessionId)
 }
 
+function handleTextSubmit(text: string) {
+  if (!text.trim()) return
+  if (ws.state.value !== 'connected') initWsSession()
+  stopTTS()
+  sessionStore.setVoiceState('processing')
+  ws.sendFrame('TEXT_INPUT', { text: text }, sessionStore.sessionId)
+}
+
 onMounted(() => {
   sessionStore.startSession()
   initWsSession()
@@ -228,70 +269,88 @@ onMounted(() => {
 
 <style scoped>
 .default-layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
-  background-color: var(--vc-bg-base);
-  color: var(--vc-text-primary);
   position: relative;
-  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden; 
+  background-color: var(--vc-primary); 
 }
 
-/* 主体区域满屏 */
-.default-layout__main {
-  flex: 1;
-  width: 100%;
-  max-width: 768px; /* 适配平板与手机 */
-  margin: 0 auto;
-  overflow-y: auto;
-  padding-bottom: 120px; /* 为悬浮 Voice Hub 留出底部空间 */
+/* 移动端: 核心滑动容器 */
+.responsive-container {
+  display: flex;
+  width: 300vw;
+  height: 100%;
+  will-change: transform;
 }
 
-/* 过渡动效 */
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all var(--vc-transition-base);
+.is-animating {
+  transition: transform var(--vc-transition-spring);
 }
 
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
+.page-wrapper {
+  width: 100vw;
+  height: 100%;
+  flex-shrink: 0;
+  background-color: var(--vc-bg-base);
 }
 
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
+/* ── 桌面端适配 ──────────────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .responsive-container.is-desktop {
+    width: 100vw;
+    height: 100vh;
+    display: grid;
+    grid-template-columns: 280px 1fr 380px;
+  }
+
+  .page-wrapper {
+    width: auto;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .page-left {
+    border-right: 1px solid var(--vc-divider);
+  }
+
+  .page-right {
+    border-left: 1px solid var(--vc-divider);
+    box-shadow: -4px 0 24px rgba(0,0,0,0.02);
+    z-index: 2;
+  }
+
+  .page-center {
+    background-color: var(--vc-bg-surface);
+    z-index: 1;
+  }
+}
+
+/* Snackbar (Toast) */
+.global-snackbar {
+  position: fixed;
+  top: env(safe-area-inset-top, 24px);
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--vc-bg-surface);
+  color: var(--vc-success);
+  padding: 10px 24px;
+  border-radius: var(--vc-radius-full);
+  box-shadow: var(--vc-shadow-md);
+  font-size: var(--vc-text-sm);
+  font-weight: var(--vc-weight-bold);
+  z-index: var(--vc-z-toast);
+  border: 1px solid var(--vc-success-soft);
 }
 
 .fade-slide-up-enter-active,
 .fade-slide-up-leave-active {
   transition: all var(--vc-transition-fast);
 }
-
 .fade-slide-up-enter-from,
 .fade-slide-up-leave-to {
   opacity: 0;
-  transform: translateY(10px);
-}
-
-/* Snackbar (Toast) */
-.global-snackbar {
-  position: fixed;
-  top: var(--vc-space-xl);
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: var(--vc-bg-surface);
-  color: var(--vc-success);
-  padding: 10px 20px;
-  border-radius: var(--vc-radius-full);
-  box-shadow: var(--vc-shadow-md);
-  font-size: var(--vc-text-sm);
-  font-weight: var(--vc-weight-medium);
-  z-index: var(--vc-z-toast);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--vc-success-soft);
+  transform: translate(-50%, -10px);
 }
 </style>

@@ -21,14 +21,6 @@ const routes = [
     }
   },
   {
-    path: '/conversation',
-    name: 'conversation',
-    component: () => import('../views/ConversationView.vue'),
-    meta: {
-      title: '语音助手'
-    }
-  },
-  {
     path: '/settings',
     name: 'settings',
     component: () => import('../views/SettingsView.vue'),

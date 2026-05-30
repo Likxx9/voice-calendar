@@ -184,31 +184,71 @@ class AgentService:
     # ──────────────────────────────────────────────────────────
 
     async def _call_llm(self, system_prompt: str, user_prompt: str, use_strong: bool = False) -> str:
-        """调用 LLM（技术文档 §3.1.3 双模型路由）"""
-        if settings.AGENT_LLM_PROVIDER == "anthropic" and settings.ANTHROPIC_API_KEY:
-            return await self._call_anthropic(system_prompt, user_prompt, use_strong)
-        return await self._call_local_llm(system_prompt, user_prompt)
+        """调用 LLM（技术文档 §3.1.3 国产模型双路由）"""
+        provider = settings.AGENT_LLM_PROVIDER
+        
+        if provider == "alibaba" and settings.ALIBABA_API_KEY:
+            return await self._call_alibaba(system_prompt, user_prompt, use_strong)
+        elif provider == "zhipu" and settings.ZHIPU_API_KEY:
+            return await self._call_zhipu(system_prompt, user_prompt, use_strong)
+        else:
+            return await self._call_local_llm(system_prompt, user_prompt)
 
-    async def _call_anthropic(self, system_prompt: str, user_prompt: str, use_strong: bool) -> str:
-        model = settings.AGENT_LLM_STRONG_MODEL if use_strong else settings.AGENT_LLM_FAST_MODEL
-        async with httpx.AsyncClient(timeout=settings.TOOL_TIMEOUT_LLM_MS / 1000.0) as client:
-            resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": settings.ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "max_tokens": 2048,
-                    "system": system_prompt,
-                    "messages": [{"role": "user", "content": user_prompt}],
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["content"][0]["text"]
+    async def _call_alibaba(self, system_prompt: str, user_prompt: str, use_strong: bool) -> str:
+        """调用通义千问API（阿里云百炼平台）"""
+        model = settings.ALIBABA_STRONG_MODEL if use_strong else settings.ALIBABA_FAST_MODEL
+        try:
+            async with httpx.AsyncClient(timeout=settings.TOOL_TIMEOUT_LLM_MS / 1000.0) as client:
+                resp = await client.post(
+                    f"{settings.ALIBABA_BASE_URL}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {settings.ALIBABA_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 2048,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.warning(f"Alibaba LLM call failed: {e}")
+            return ""
+
+    async def _call_zhipu(self, system_prompt: str, user_prompt: str, use_strong: bool) -> str:
+        """调用智谱GLM API（智谱AI开放平台）"""
+        model = settings.ZHIPU_STRONG_MODEL if use_strong else settings.ZHIPU_FAST_MODEL
+        try:
+            async with httpx.AsyncClient(timeout=settings.TOOL_TIMEOUT_LLM_MS / 1000.0) as client:
+                resp = await client.post(
+                    f"{settings.ZHIPU_BASE_URL}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {settings.ZHIPU_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 2048,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.warning(f"Zhipu LLM call failed: {e}")
+            return ""
 
     async def _call_local_llm(self, system_prompt: str, user_prompt: str) -> str:
         """调用本地 LLM（Ollama / vLLM）"""

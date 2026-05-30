@@ -29,17 +29,29 @@ class Settings(BaseSettings):
         "http://localhost:8080"
     ]
 
-    # LLM配置 - 双模型路由（技术文档 §3.1.3）
-    # 简单规划使用 Haiku，复杂规划使用 Sonnet
-    LLM_MODEL: str = "qwen-2.5-7b"
+    # LLM配置 - 国产模型双路由（技术文档 §3.1.3）
+    # NLU语义解析：本地Ollama / 云端通义千问
+    LLM_MODEL: str = "qwen2.5-7b-instruct"
     LLM_API_KEY: str = ""
-    LLM_BASE_URL: str = "http://localhost:11434"
+    LLM_BASE_URL: str = "http://localhost:11434"  # Ollama本地服务
 
-    # Agent LLM 配置 - Anthropic Claude 双模型路由（技术文档 §3.1.3）
-    AGENT_LLM_PROVIDER: str = "anthropic"  # anthropic / local
-    ANTHROPIC_API_KEY: str = ""
-    AGENT_LLM_FAST_MODEL: str = "claude-haiku-4-5"  # 简单多意图规划，目标延迟 < 500ms
-    AGENT_LLM_STRONG_MODEL: str = "claude-sonnet-4-6"  # 复杂依赖链规划，目标延迟 < 1500ms
+    # Agent LLM 配置 - 国产模型双路由（技术文档 §3.1.3）
+    # 支持：alibaba(通义千问) / zhipu(智谱GLM) / local(本地Ollama)
+    AGENT_LLM_PROVIDER: str = "alibaba"  # alibaba / zhipu / local
+    
+    # 通义千问配置（阿里云百炼平台）
+    ALIBABA_API_KEY: str = ""  # 通义千问API密钥
+    ALIBABA_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    ALIBABA_FAST_MODEL: str = "qwen-turbo"       # 快速模型，目标延迟 < 500ms
+    ALIBABA_STRONG_MODEL: str = "qwen-plus"      # 强力模型，目标延迟 < 1500ms
+    
+    # 智谱GLM配置（智谱AI开放平台）
+    ZHIPU_API_KEY: str = ""  # 智谱API密钥
+    ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
+    ZHIPU_FAST_MODEL: str = "glm-4-flash"        # 快速模型
+    ZHIPU_STRONG_MODEL: str = "glm-4-plus"       # 强力模型
+    
+    # 本地模型配置（Ollama）
     AGENT_LLM_LOCAL_MODEL: str = "qwen2.5-7b-instruct"  # 本地隐私敏感场景
 
     # 意图关联判断阈值（技术文档 §3.2.1）
