@@ -287,6 +287,62 @@ function stopStreamingSimulation() {
   }
 }
 
+// 语音识别相关
+let recognition: any = null
+let isRecording = false
+
+// 初始化语音识别
+function initSpeechRecognition() {
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  if (!SpeechRecognition) {
+    console.warn('浏览器不支持语音识别')
+    return null
+  }
+  
+  const rec = new SpeechRecognition()
+  rec.continuous = false
+  rec.interimResults = true
+  rec.lang = 'zh-CN'
+  
+  rec.onresult = (event: any) => {
+    let interimTranscript = ''
+    let finalTranscript = ''
+    
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript
+      } else {
+        interimTranscript += transcript
+      }
+    }
+    
+    if (interimTranscript) {
+      sessionStore.updatePartialTranscript(interimTranscript)
+    }
+    
+    if (finalTranscript) {
+      sessionStore.setFinalTranscript(finalTranscript)
+      sessionStore.updatePartialTranscript('')
+    }
+  }
+  
+  rec.onend = () => {
+    isRecording = false
+    if (sessionStore.voiceState === 'recording') {
+      stopVoiceInput()
+    }
+  }
+  
+  rec.onerror = (event: any) => {
+    console.error('语音识别错误:', event.error)
+    isRecording = false
+    sessionStore.setVoiceState('idle')
+  }
+  
+  return rec
+}
+
 // 语音交互状态流控制
 function startVoiceInput() {
   stopTTS()
@@ -294,22 +350,50 @@ function startVoiceInput() {
   sessionStore.setVoiceState('recording')
   sessionStore.setConnectionState('connected')
   simulateVolume()
-  startStreamingSimulation()
+  
+  // 尝试使用浏览器语音识别
+  if (!recognition) {
+    recognition = initSpeechRecognition()
+  }
+  
+  if (recognition && !isRecording) {
+    try {
+      recognition.start()
+      isRecording = true
+    } catch (e) {
+      console.error('启动语音识别失败:', e)
+      // 回退到模拟模式
+      startStreamingSimulation()
+    }
+  } else {
+    // 回退到模拟模式
+    startStreamingSimulation()
+  }
 }
 
 function stopVoiceInput() {
   stopVolumeSimulation()
   stopStreamingSimulation()
+  
+  if (recognition && isRecording) {
+    try {
+      recognition.stop()
+    } catch (e) {
+      // 忽略
+    }
+    isRecording = false
+  }
+  
   vibrate('processing')
   sessionStore.setVoiceState('processing')
   
-  const finalSpeechText = sessionStore.partialTranscript || '明天下午三点和PM开会'
+  const finalSpeechText = sessionStore.partialTranscript || sessionStore.finalTranscript || '明天下午三点和PM开会'
   sessionStore.setFinalTranscript(finalSpeechText)
   sessionStore.updatePartialTranscript('')
   
   setTimeout(() => {
     processUserInput(finalSpeechText)
-  }, 1200)
+  }, 500)
 }
 
 function handleTapButton() {
@@ -336,7 +420,12 @@ function handleQuickInput(text: string) {
 }
 
 // 对话与场景核心逻辑
-function processUserInput(text: string) {
+import { createEvent, checkConflicts, healthCheck } from '@/services/api'
+
+const API_BASE_URL = 'http://localhost:8000'
+const DEFAULT_USER_ID = 'user-001'
+
+async function processUserInput(text: string) {
   // 1. 添加用户消息
   sessionStore.addMessage({
     role: 'user',
@@ -344,6 +433,19 @@ function processUserInput(text: string) {
     type: 'voice'
   })
   scrollToBottom()
+
+  // 检查后端是否可用
+  const backendAvailable = await healthCheck()
+  
+  if (!backendAvailable) {
+    sessionStore.addMessage({
+      role: 'system',
+      content: '后端服务未启动，请先启动后端服务 (python -m uvicorn app.main:app --port 8000)',
+      type: 'error'
+    })
+    sessionStore.setVoiceState('idle')
+    return
+  }
 
   // 2. 规则路由与意图匹配模拟
   if (text.includes('搜') || text.includes('查') || text.includes('实践') || text.includes('活动') || text.includes('展') || text.includes('检索')) {
@@ -492,30 +594,96 @@ function processUserInput(text: string) {
     vibrate('success')
     speakText(`已为您添加待办：${taskTitle}`)
     setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
-  } else if (text.includes('三点') || text.includes('下午3点') || text.includes('15:00')) {
-    // 完美匹配创建日程
-    const todayStr = new Date().toISOString().split('T')[0]
-    calendarStore.addEvent({
-      id: `ev-${Date.now()}`,
-      title: '和 PM 沟通对齐会',
-      start_time: `${todayStr}T15:00:00`,
-      end_time: `${todayStr}T16:00:00`,
-      calendar_id: 'work',
-      calendar_name: '工作',
-      color: '#8B5CF6',
-      is_deleted: false,
-      version_tag: 'v1',
-      created_at: new Date().toISOString()
-    })
-    sessionStore.setVoiceState('success')
-    sessionStore.addMessage({
-      role: 'system',
-      content: '好的，已为您成功创建明天下午 3:00 的日程：“和 PM 沟通对齐会”',
-      type: 'result'
-    })
-    vibrate('success')
-    speakText('好的，已为您成功创建明天下午三点的沟通会！')
-    setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
+  } else if (text.includes('三点') || text.includes('下午3点') || text.includes('15:00') || text.includes('开会') || text.includes('会议')) {
+    // 解析时间
+    const now = new Date()
+    let targetDate = new Date(now)
+    targetDate.setDate(targetDate.getDate() + 1) // 默认明天
+    
+    if (text.includes('今天')) {
+      targetDate = new Date(now)
+    } else if (text.includes('后天')) {
+      targetDate.setDate(targetDate.getDate() + 2)
+    }
+    
+    let hour = 15 // 默认下午3点
+    if (text.includes('两点') || text.includes('14:00') || text.includes('14点')) hour = 14
+    else if (text.includes('三点') || text.includes('15:00') || text.includes('15点')) hour = 15
+    else if (text.includes('四点') || text.includes('16:00') || text.includes('16点')) hour = 16
+    else if (text.includes('上午') || text.includes('九点') || text.includes('9:00')) hour = 9
+    
+    const startTime = new Date(targetDate)
+    startTime.setHours(hour, 0, 0, 0)
+    const endTime = new Date(startTime)
+    endTime.setHours(hour + 1, 0, 0, 0)
+    
+    const startTimeStr = startTime.toISOString().replace('Z', '+08:00')
+    const endTimeStr = endTime.toISOString().replace('Z', '+08:00')
+    
+    // 提取标题
+    let title = '新会议'
+    if (text.includes('开会') || text.includes('会议')) {
+      title = text.replace(/帮我|创建|添加|明天|今天|后天|下午|上午|的|和|开会|会议/g, '').trim() || '会议'
+    }
+    
+    // 检查冲突
+    try {
+      const conflictResult = await checkConflicts(DEFAULT_USER_ID, startTimeStr, endTimeStr)
+      
+      if (conflictResult.has_conflict) {
+        // 有冲突
+        sessionStore.setVoiceState('conflict')
+        mockConflicts.value = conflictResult.conflicts
+        sessionStore.addMessage({
+          role: 'system',
+          content: `检测到时间冲突！您在 ${startTime.getHours()}:00 已有日程。`,
+          type: 'conflict'
+        })
+        vibrate('conflict')
+        speakText('对不起，这个时间段您有另一个日程冲突。推荐改期或强制创建。')
+        return
+      }
+      
+      // 无冲突，创建事件
+      const newEvent = await createEvent({
+        user_id: DEFAULT_USER_ID,
+        title: title,
+        start_time: startTimeStr,
+        end_time: endTimeStr,
+        timezone: 'Asia/Shanghai'
+      })
+      
+      calendarStore.addEvent({
+        id: newEvent.id || `ev-${Date.now()}`,
+        title: title,
+        start_time: startTimeStr,
+        end_time: endTimeStr,
+        calendar_id: 'work',
+        calendar_name: '工作',
+        color: '#8B5CF6',
+        is_deleted: false,
+        version_tag: 'v1',
+        created_at: new Date().toISOString()
+      })
+      
+      sessionStore.setVoiceState('success')
+      sessionStore.addMessage({
+        role: 'system',
+        content: `好的，已为您成功创建日程：${title}，时间：${startTime.getMonth()+1}月${startTime.getDate()}日 ${hour}:00`,
+        type: 'result'
+      })
+      vibrate('success')
+      speakText(`好的，已为您成功创建${title}！`)
+      setTimeout(() => { sessionStore.setVoiceState('idle') }, 2000)
+    } catch (error) {
+      console.error('创建事件失败:', error)
+      sessionStore.addMessage({
+        role: 'system',
+        content: '创建事件失败，请重试',
+        type: 'error'
+      })
+      sessionStore.setVoiceState('idle')
+    }
   } else {
     // 意图不明，触发追问 Clarification
     sessionStore.setVoiceState('clarifying')
