@@ -2,6 +2,10 @@
 
 > 让每一句话都变成日程，让每一次出行都有规划。
 
+### 演示视频
+
+[![VoiCal 演示视频](https://img.shields.io/badge/Bilibili-观看演示视频-blue?style=for-the-badge&logo=bilibili)](https://www.bilibili.com/video/BV11nVQ6oE24/)
+
 ---
 
 ## 一、需求分析
