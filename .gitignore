@@ -38,5 +38,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Temp files
+.trae/
+test_output.txt
+
 # Compiled
 *.pcm

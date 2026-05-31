@@ -13,8 +13,8 @@ from datetime import datetime
 from time import mktime
 import threading
 import pyaudio
-import notifier
-from agent import process_voice_intent
+from app.core import notifier
+from app.services.agent import process_voice_intent
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -205,9 +205,20 @@ class _Ws_Param:
         return url + '?' + urlencode(v)
 
 
+current_session = None
+
 def start_listen_session() -> str:
+    global current_session
     session = ASRSession()
-    return session.run()
+    current_session = session
+    text = session.run()
+    current_session = None
+    return text
+
+def stop_listen_session():
+    global current_session
+    if current_session:
+        current_session.stop()
 
 
 def run_assistant():

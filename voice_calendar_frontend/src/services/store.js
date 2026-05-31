@@ -1,57 +1,139 @@
 import { reactive } from 'vue'
 
+// 从 localStorage 恢复聊天历史
+function loadChatHistory() {
+  try {
+    const saved = localStorage.getItem('voical_chat_history')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed)) return parsed.slice(-200) // 最多保留200条
+    }
+  } catch (e) {}
+  return []
+}
+
+// 恢复登录状态
+function loadAuthState() {
+  try {
+    const token = localStorage.getItem('voical_token')
+    const user = localStorage.getItem('voical_user')
+    if (token && user) return { token, user: JSON.parse(user) }
+  } catch (e) {}
+  return { token: null, user: null }
+}
+
+const savedAuth = loadAuthState()
+
+function loadSettings() {
+  try {
+    const s = localStorage.getItem('voical_settings')
+    if (s) return JSON.parse(s)
+  } catch (e) {}
+  return {}
+}
+const savedSettings = loadSettings()
+
 export const store = reactive({
-  events: [
-    { col: 1, id: 1, title: '高管周会', s: 9.5, e: 11, c: 'gold', loc: '会议室A', type: '会议', isNew: false, att: 8 },
-    { col: 2, id: 2, title: '产品评审', s: 13, e: 15, c: 'blue', loc: '线上会议', type: '项目', isNew: false, att: 12 },
-    { col: 3, id: 3, title: '战略研讨会', s: 10, e: 12.5, c: 'red', loc: 'CEO办公室', type: '战略', isNew: false, att: 4 },
-  ],
-  alog: [], // Agent 终端日志
+  // Auth
+  authToken: savedAuth.token,
+  currentUser: savedAuth.user,
+
+  // Settings
+  settings: {
+    ttsSpeed: savedSettings.ttsSpeed ?? 50,
+    ttsVoice: savedSettings.ttsVoice ?? 'xiaoyan',
+    asrLanguage: savedSettings.asrLanguage ?? 'zh_cn',
+    wakeWord: savedSettings.wakeWord ?? '',
+    defaultView: savedSettings.defaultView ?? 'week',
+    workHourStart: savedSettings.workHourStart ?? 9,
+    workHourEnd: savedSettings.workHourEnd ?? 18,
+    weekStartDay: savedSettings.weekStartDay ?? 0,
+    reminderDefault: savedSettings.reminderDefault ?? 15,
+    theme: savedSettings.theme ?? 'dark',
+  },
+
+  events: [],
+  alog: loadChatHistory(),
   voiceState: 'idle', // idle, listening, processing, done
   currentQuery: '',
   hasConflict: false,
   conflictInfo: null,
   timeSuggestion: null,
-  
+  trainOptions: null,
+  transportOptions: null,
+
   // Calendar Interactivity State
   currentDate: new Date(),
-  currentView: 'week',
+  currentView: window.innerWidth <= 767 ? 'day' : 'week',
   modalVisible: false,
   selectedEvent: null,
   calendars: {
     executive: true,
     project: true
+  },
+
+  // Mobile specific state
+  isMobile: window.innerWidth <= 767,
+  mobileTab: 'today', // today, calendar, voice, tasks, profile
+  showVoiceFullscreen: false
+})
+
+window.addEventListener('resize', () => {
+  const isMobile = window.innerWidth <= 767;
+  if (store.isMobile !== isMobile) {
+    store.isMobile = isMobile;
+    store.currentView = isMobile ? 'day' : 'week';
   }
 })
 
 export function addLog(text, tagClass = '') {
+  const now = new Date()
   store.alog.push({
     id: Date.now() + Math.random(),
     text,
-    tagClass
+    tagClass,
+    time: `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`,
   })
+  // 持久化到 localStorage
+  try {
+    const toSave = store.alog.slice(-200)
+    localStorage.setItem('voical_chat_history', JSON.stringify(toSave))
+  } catch (e) {}
+}
+
+export function clearChatHistory() {
+  store.alog = []
+  try { localStorage.removeItem('voical_chat_history') } catch (e) {}
+}
+
+// 剥掉时区后缀，强制当作本地时间解析，避免 UTC 时差导致幽灵日程
+function parseLocalTime(iso) {
+  if (!iso) return null
+  // 去掉 Z / +08:00 / -05:00 等后缀
+  const s = String(iso).replace(/[Zz]$/, '').replace(/[+-]\d{2}:\d{2}$/, '')
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
 }
 
 export function addEvent(eventData) {
-  let col = new Date().getDay()
   let s = 14
   let e = 15
   let st = new Date()
 
   try {
     if (eventData.start_time) {
-      st = new Date(eventData.start_time)
-      col = st.getDay()
+      st = parseLocalTime(eventData.start_time) || new Date()
       s = st.getHours() + st.getMinutes() / 60
     }
     if (eventData.end_time) {
-      const et = new Date(eventData.end_time)
+      const et = parseLocalTime(eventData.end_time) || st
       e = et.getHours() + et.getMinutes() / 60
     }
-  } catch (err) {}
+  } catch (err) { }
 
   const newEvent = {
-    col,
+    col: st.getDay(),
+    dateStr: st.toDateString(),
     id: Date.now(),
     title: eventData.title || '新日程',
     s,
@@ -87,7 +169,7 @@ export function goToday() {
   const calScroll = document.getElementById('cal-scroll')
   if (calScroll) {
     const hr = new Date().getHours()
-    calScroll.scrollTop = Math.max(0, (hr - 8 - 1) * 52)
+    calScroll.scrollTop = Math.max(0, (hr - 6 - 1) * 52)
   }
 }
 
@@ -107,4 +189,68 @@ export function closeModal() {
 
 export function toggleCalendar(key) {
   store.calendars[key] = !store.calendars[key]
+}
+
+// ── Auth ────────────────────────────────────────────────
+export function loginSuccess(user) {
+  store.currentUser = user
+  store.authToken = localStorage.getItem('voical_token')
+  fetchEvents()
+}
+
+export function logout() {
+  store.authToken = null
+  store.currentUser = null
+  store.events = []
+  localStorage.removeItem('voical_token')
+  localStorage.removeItem('voical_user')
+}
+
+export function saveSettings() {
+  try {
+    localStorage.setItem('voical_settings', JSON.stringify(store.settings))
+  } catch (e) {}
+}
+
+export function updateUser(userData) {
+  store.currentUser = { ...store.currentUser, ...userData }
+  localStorage.setItem('voical_user', JSON.stringify(store.currentUser))
+}
+
+export function isLoggedIn() {
+  return !!(store.authToken && store.currentUser)
+}
+
+// ── 从后端加载真实日程 ──────────────────────────────────
+export async function fetchEvents() {
+  try {
+    const resp = await fetch('/api/events')
+    if (!resp.ok) {
+      const text = await resp.text()
+      throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`)
+    }
+    const data = await resp.json()
+
+    const events = data.map(ev => {
+      const st = parseLocalTime(ev.start_time) || new Date(ev.start_time)
+      const et = ev.end_time ? (parseLocalTime(ev.end_time) || new Date(ev.end_time)) : null
+      return {
+        ...ev,
+        dateStr: st.toDateString(),
+        col: st.getDay(),
+        s: ev.s ?? (st.getHours() + st.getMinutes() / 60),
+        e: ev.e ?? (et ? et.getHours() + et.getMinutes() / 60 : st.getHours() + 1),
+      }
+    })
+
+    store.events = events
+    console.log(`[Store] 从后端加载了 ${events.length} 条日程`, events)
+  } catch (err) {
+    console.error('[Store] 加载日程失败:', err)
+  }
+}
+
+// 启动时如果已登录则加载日程
+if (store.authToken) {
+  fetchEvents()
 }

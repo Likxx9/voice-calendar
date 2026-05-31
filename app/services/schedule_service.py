@@ -2,6 +2,14 @@ from __future__ import annotations
 import uuid
 import asyncio
 from datetime import datetime, timedelta, timezone
+
+def ensure_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is not None:
+        return dt.astimezone().replace(tzinfo=None)
+    return dt
+
+def get_now() -> datetime:
+    return datetime.now()
 from typing import List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -56,7 +64,7 @@ class ScheduleService:
         # 提醒
         for rem_data in data.reminders:
             remind_at = data.start_time - timedelta(minutes=rem_data.minutes_before)
-            if remind_at > datetime.now():
+            if remind_at > get_now():
                 reminder = Reminder(
                     event_id       = event.id,
                     remind_at      = remind_at,
@@ -125,9 +133,12 @@ class ScheduleService:
     async def delete_event(self, user_id: uuid.UUID, event_id: uuid.UUID) -> bool:
         event = await self.get_event(user_id, event_id)
         if not event:
+            print(f"[ScheduleService] delete_event: 未找到 event_id={event_id}")
             return False
         event.is_deleted = True
         event.status = EventStatus.CANCELLED
+        await self.db.flush()
+        print(f"[ScheduleService] delete_event: 已标记删除 '{event.title}' (id={event.id})")
         return True
 
     # ── 冲突检测 ───────────────────────────────────────────────

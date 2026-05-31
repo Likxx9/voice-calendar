@@ -33,6 +33,7 @@ class User(Base, UUIDMixin, TimestampMixin):
         SAEnum(CalendarPlatform), default=CalendarPlatform.DINGTALK
     )
     calendar_token_encrypted: Mapped[Optional[str]] = mapped_column(String(512))
+    password_hash:    Mapped[Optional[str]] = mapped_column(String(256))
     is_active:        Mapped[bool]          = mapped_column(Boolean, default=True)
 
     # Relations

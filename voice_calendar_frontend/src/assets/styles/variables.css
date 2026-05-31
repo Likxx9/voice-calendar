@@ -38,4 +38,58 @@
 
   /* ── 圆角 ── */
   --r: 9px;
+  
+  /* ── 触摸与间距 (Desktop Default) ── */
+  --touch-target: 32px;
+  --touch-target-l: 44px;
+  --sp-xs: 4px;
+  --sp-sm: 8px;
+  --sp-md: 12px;
+  --sp-lg: 20px;
+  --sp-xl: 28px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+  
+  --cal-hour-h: 52px;
+  --cal-time-col: 52px;
+}
+
+@media (max-width: 767px) {
+  :root {
+    /* ── 触摸目标最小尺寸 ── */
+    --touch-target: 44px;        /* iOS HIG 和 Material 规范最小值 */
+    --touch-target-l: 56px;       /* 大型主操作（FAB、主按钮） */
+
+    /* ── 间距系统（移动端增大 20%）── */
+    --sp-xs: 6px;                 /* 桌面: 4px */
+    --sp-sm: 10px;                /* 桌面: 8px */
+    --sp-md: 16px;                /* 桌面: 12px */
+    --sp-lg: 24px;                /* 桌面: 20px */
+    --sp-xl: 32px;                /* 桌面: 28px */
+
+    /* ── 圆角（移动端更大，更现代）── */
+    --r: 12px;                    /* 桌面: 9px */
+    --r-lg: 20px;                 /* 卡片、Bottom Sheet 顶角 */
+    --r-xl: 28px;                 /* FAB、大按钮 */
+
+    /* ── FAB 专用 ── */
+    --fab-size: 56px;
+    --fab-bottom: 80px;           /* Tab Bar 高度（56px）+ 间距（24px） */
+    --fab-right: 20px;
+
+    /* ── Bottom Sheet ── */
+    --sheet-radius: 24px;
+    --sheet-handle-w: 40px;
+    --sheet-handle-h: 4px;
+
+    /* ── Tab Bar ── */
+    --tab-height: 56px;
+    --tab-icon-sz: 24px;
+    --tab-label-sz: 10px;
+
+    /* ── 日历参数（移动端）── */
+    --cal-hour-h: 48px;           /* 桌面: 52px，移动端略压缩 */
+    --cal-time-col: 36px;         /* 桌面: 52px，移动端缩小时间列 */
+  }
 }

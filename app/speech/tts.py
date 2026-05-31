@@ -26,6 +26,16 @@ class XunfeiTTS:
         self.host = "tts-api.xfyun.cn"
         self.path = "/v2/tts"
         self._lock = threading.Lock()
+        self._cancel_flag = False
+        self.ws = None
+
+    def stop(self):
+        self._cancel_flag = True
+        if self.ws:
+            try:
+                self.ws.close()
+            except Exception:
+                pass
 
     def create_url(self):
         url = f'wss://{self.host}{self.path}'
@@ -52,12 +62,16 @@ class XunfeiTTS:
             self._do_synthesize(text)
 
     def _do_synthesize(self, text):
+        self._cancel_flag = False
         print(f"\n[TTS 开始播报] {text}")
 
         p = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, output=True)
 
         def on_message(ws, message):
+            if self._cancel_flag:
+                ws.close()
+                return
             try:
                 msg = json.loads(message)
                 code = msg["code"]
@@ -91,9 +105,9 @@ class XunfeiTTS:
 
         websocket.enableTrace(False)
         ws_url = self.create_url()
-        ws = websocket.WebSocketApp(ws_url, on_message=on_message, on_error=on_error, on_close=on_close)
-        ws.on_open = on_open
-        ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
+        self.ws = websocket.WebSocketApp(ws_url, on_message=on_message, on_error=on_error, on_close=on_close)
+        self.ws.on_open = on_open
+        self.ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
 
         time.sleep(0.5)
 

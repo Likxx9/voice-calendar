@@ -23,7 +23,11 @@
       <div class="divider"></div>
       
       <div class="mini-cal">
-        <div class="mc-head">{{ miniCalHead }}</div>
+        <div class="mc-head">
+          <button class="mc-nav-btn" @click="prevMonth">&lt;</button>
+          <span>{{ miniCalHead }}</span>
+          <button class="mc-nav-btn" @click="nextMonth">&gt;</button>
+        </div>
         <div class="mc-grid">
           <div class="mc-day" v-for="d in ['日','一','二','三','四','五','六']" :key="d">{{ d }}</div>
           
@@ -36,26 +40,59 @@
       </div>
     </div>
     <div class="sb-foot">
-      <div class="avatar">VP</div>
+      <div class="avatar">{{ userInitial }}</div>
       <div class="user-info">
-        <div class="uname">Executive User</div>
+        <div class="uname">{{ store.currentUser?.name || 'User' }}</div>
         <div class="ustatus"><span class="online-dot"></span>系统在线</div>
       </div>
+      <button class="settings-btn" @click="$emit('open-settings')" title="设置">⚙</button>
+      <button class="logout-btn" @click="handleLogout" title="退出登录">↗</button>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { store, setView, toggleCalendar } from '../services/store'
+import { ref, computed, watch } from 'vue'
+import { store, setView, toggleCalendar, logout } from '../services/store'
+
+defineEmits(['open-settings'])
+
+const userInitial = computed(() => {
+  const name = store.currentUser?.name || 'U'
+  return name.slice(0, 2)
+})
+
+const handleLogout = () => {
+  logout()
+}
+
+const miniCalDate = ref(new Date(store.currentDate))
+
+watch(() => store.currentDate, (newVal) => {
+  if (miniCalDate.value.getMonth() !== newVal.getMonth() || miniCalDate.value.getFullYear() !== newVal.getFullYear()) {
+    miniCalDate.value = new Date(newVal)
+  }
+})
+
+const prevMonth = () => {
+  const d = new Date(miniCalDate.value)
+  d.setMonth(d.getMonth() - 1)
+  miniCalDate.value = d
+}
+
+const nextMonth = () => {
+  const d = new Date(miniCalDate.value)
+  d.setMonth(d.getMonth() + 1)
+  miniCalDate.value = d
+}
 
 const miniCalHead = computed(() => {
-  const d = store.currentDate
+  const d = miniCalDate.value
   return `${d.getFullYear()}年 ${d.getMonth() + 1}月`
 })
 
 const miniCalCells = computed(() => {
-  const d = store.currentDate
+  const d = miniCalDate.value
   const year = d.getFullYear()
   const month = d.getMonth()
   const firstDay = new Date(year, month, 1)
@@ -71,14 +108,15 @@ const miniCalCells = computed(() => {
   for (let i = 1; i <= lastDay.getDate(); i++) {
     const cellDate = new Date(year, month, i)
     // mock has-evt logic based on store.events
-    const hasEvt = store.events.some(e => e.col === cellDate.getDay())
+    const dateStr = cellDate.toDateString()
+    const hasEvt = store.events.some(e => e.dateStr === dateStr)
     
     cells.push({
       date: i,
       fullDate: cellDate,
       empty: false,
       isToday: cellDate.toDateString() === new Date().toDateString(),
-      isSelected: cellDate.toDateString() === d.toDateString(),
+      isSelected: cellDate.toDateString() === store.currentDate.toDateString(),
       hasEvt
     })
   }
@@ -118,7 +156,9 @@ const selectDate = (cell) => {
 .divider { height: 1px; background: var(--border); margin: 16px 0; }
 
 .mini-cal { padding: 8px; }
-.mc-head { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 12px; text-align: center; }
+.mc-head { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; padding: 0 4px; }
+.mc-nav-btn { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 14px; padding: 0 4px; transition: color 0.2s; }
+.mc-nav-btn:hover { color: var(--gold); }
 .mc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
 .mc-day { font-size: 9px; color: var(--text3); text-align: center; margin-bottom: 4px; }
 .mc-cell {
@@ -129,7 +169,8 @@ const selectDate = (cell) => {
 .mc-cell.empty { pointer-events: none; }
 .mc-cell:hover:not(.today):not(.selected) { background: var(--bg-hover); color: var(--text); }
 .mc-cell.today { background: var(--gold); color: #000; font-weight: 600; }
-.mc-cell.selected { border: 1px solid var(--gold); color: var(--gold); }
+.mc-cell.selected { border: 1px solid var(--gold); }
+.mc-cell.selected:not(.today) { color: var(--gold); }
 .mc-cell.has-evt::after {
   content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
   width: 3px; height: 3px; border-radius: 50%; background: var(--gold);
@@ -137,6 +178,10 @@ const selectDate = (cell) => {
 .mc-cell.today.has-evt::after { background: #000; }
 
 .sb-foot { padding: 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+.settings-btn { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text3); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.settings-btn:hover { color: var(--gold); border-color: var(--gold-border); }
+.logout-btn { margin-left: 4px; background: none; border: 1px solid var(--border); color: var(--text3); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.logout-btn:hover { color: #ff6b6b; border-color: #ff6b6b; }
 .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--gold-dim); color: var(--gold); display: flex; align-items: center; justify-content: center; font-family: var(--fd); font-weight: 600; }
 .uname { color: var(--text); font-weight: 500; font-size: 12px; }
 .ustatus { color: var(--text2); font-size: 10px; display: flex; align-items: center; gap: 4px; margin-top: 2px; }

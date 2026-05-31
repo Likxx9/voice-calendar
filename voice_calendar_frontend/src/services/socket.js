@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client'
-import { store, addLog, addEvent } from './store'
+import { store, addLog, fetchEvents } from './store'
 
 const socket = io({
   reconnection: true,
@@ -39,11 +39,12 @@ socket.on('server_event', (msg) => {
       if (data.final && data.text.trim()) {
         store.currentQuery = data.text
         store.voiceState = 'processing'
-        store.alog = []
         store.hasConflict = false
         store.conflictInfo = null
         store.timeSuggestion = null
-        addLog('[ASR] 识别完成：' + data.text)
+        store.trainOptions = null
+        store.transportOptions = null
+        addLog(data.text, 'u')
       }
       break
 
@@ -62,39 +63,37 @@ socket.on('server_event', (msg) => {
 
     case 'event_created':
       console.log('[SocketIO] event_created received:', data)
-      addEvent({
-        title: data.title,
-        start_time: data.start_time,
-        end_time: data.end_time,
-      })
       addLog(`[日程] 已创建：${data.title}`, 's')
+      if (data.start_time) {
+        store.currentDate = new Date(data.start_time)
+      }
+      fetchEvents()
       break
 
-    case 'event_updated': {
-      console.log('[SocketIO] event_updated received:', data)
-      const oldTitle = data.old_title || data.title
-      const idx = store.events.findIndex(e => e.title === oldTitle)
-      if (idx !== -1) {
-        store.events.splice(idx, 1)
-      }
-      addEvent({
-        title: data.title,
-        start_time: data.start_time,
-        end_time: data.end_time,
-      })
-      addLog(`[日程] 已修改：${oldTitle} → ${new Date(data.start_time).getMonth()+1}月${new Date(data.start_time).getDate()}日 ${new Date(data.start_time).getHours()}:${String(new Date(data.start_time).getMinutes()).padStart(2,'0')}`, 's')
+    case 'event_deleted':
+      console.log('[SocketIO] event_deleted received:', data)
+      addLog(`[日程] 已删除：${data.title}`, 's')
+      fetchEvents()
       break
-    }
+
+    case 'event_updated':
+      console.log('[SocketIO] event_updated received:', data)
+      addLog(`[日程] 已修改：${data.old_title || data.title}`, 's')
+      if (data.start_time) {
+        store.currentDate = new Date(data.start_time)
+      }
+      fetchEvents()
+      break
 
     case 'time_suggestion': {
       const sugStart = new Date(data.suggested_start)
-      const timeStr = `${sugStart.getMonth()+1}月${sugStart.getDate()}日 ${sugStart.getHours()}:${String(sugStart.getMinutes()).padStart(2,'0')}`
+      const timeStr = `${sugStart.getMonth() + 1}月${sugStart.getDate()}日 ${sugStart.getHours()}:${String(sugStart.getMinutes()).padStart(2, '0')}`
       const reason = data.reason || '未指定时间'
       addLog(`[智能推荐] "${data.title}"${reason}，已安排到：${timeStr}`, 's')
       if (data.alternatives && data.alternatives.length > 1) {
         const altTexts = data.alternatives.slice(1, 4).map(a => {
           const d = new Date(a.start)
-          return `${d.getMonth()+1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}(${a.duration_minutes}分钟)`
+          return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}(${a.duration_minutes}分钟)`
         })
         addLog(`[备选时段] ${altTexts.join('、')}`)
       }
@@ -108,6 +107,23 @@ socket.on('server_event', (msg) => {
       store.conflictInfo = data
       break
 
+    case 'transport_options':
+      store.transportOptions = data
+      store.trainOptions = null
+      addLog(`[出行] 已查询到 ${data.options.length} 种出行方式${data.is_intercity ? '（跨城，可选高铁）' : ''}`, 's')
+      break
+
+    case 'train_options':
+      store.trainOptions = data
+      store.transportOptions = null
+      addLog(`[高铁] 查询到 ${data.trains.length} 趟可选车次`, 's')
+      break
+
+    case 'await_user_choice':
+      store.voiceState = 'awaiting'
+      addLog(`[Agent] ${data.message}`)
+      break
+
     case 'tts_text':
       addLog(`[Agent] ${data.text}`)
       store.voiceState = 'done'
@@ -115,6 +131,7 @@ socket.on('server_event', (msg) => {
 
     case 'session_end':
       addLog(`[System] ${data.message}`)
+      fetchEvents()
       setTimeout(() => {
         store.voiceState = 'idle'
         store.currentQuery = ''
@@ -131,6 +148,10 @@ export function sendVoiceInput(text) {
 
 export function startBackendRecording() {
   socket.emit('start_recording')
+}
+
+export function stopBackendRecording() {
+  socket.emit('stop_recording')
 }
 
 export default socket

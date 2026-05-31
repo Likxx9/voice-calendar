@@ -10,6 +10,48 @@ body {
   overflow: hidden;
 }
 
+@media (max-width: 767px) {
+  body {
+    font-size: 15px; /* Mobile readability bump */
+    line-height: 1.6;
+  }
+}
+
+.app-mobile {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.mobile-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Touch feedback overrides */
+@media (hover: none) {
+  .interactive:active {
+    opacity: 0.75;
+    transform: scale(0.97);
+    transition: transform 0.1s ease, opacity 0.1s ease;
+  }
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+.selectable-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body::before {
   content: '';
   position: fixed;

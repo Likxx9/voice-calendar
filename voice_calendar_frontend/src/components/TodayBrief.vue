@@ -28,8 +28,8 @@ const briefTitle = computed(() => {
 })
 
 const todayEvents = computed(() => {
-  const currentDay = store.currentDate.getDay()
-  return store.events.filter(e => e.col === currentDay).sort((a, b) => a.s - b.s)
+  const targetDateStr = store.currentDate.toDateString()
+  return store.events.filter(e => e.dateStr === targetDateStr).sort((a, b) => a.s - b.s)
 })
 
 const fmtTime = (h) => {
