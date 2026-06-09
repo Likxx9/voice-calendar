@@ -10,9 +10,12 @@ from datetime import datetime, timedelta
 class Base(DeclarativeBase):
     pass
 
+from sqlalchemy.pool import NullPool
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
+    poolclass=NullPool,
 )
 
 async def init_db():

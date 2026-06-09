@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB:       voical
+      POSTGRES_USER:     voical
+      POSTGRES_PASSWORD: voical_secure_pass_123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: always
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://voical:voical_secure_pass_123@db:5432/voical
+      - REDIS_URL=redis://redis:6379/0
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+      - AMAP_API_KEY=${AMAP_API_KEY}
+      - XUNFEI_APPID=${XUNFEI_APPID}
+      - XUNFEI_API_KEY=${XUNFEI_API_KEY}
+      - XUNFEI_API_SECRET=${XUNFEI_API_SECRET}
+    expose:
+      - "5000"
+
+  frontend:
+    build:
+      context: ./voice_calendar_frontend
+      dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  redis_data:

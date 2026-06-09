@@ -18,6 +18,15 @@
 
     <div class="v-status">{{ statusText }}</div>
 
+    <div v-if="store.micError" class="mic-error-banner">
+      <span v-if="store.micError === 'secure_context_required'">
+        ⚠️ 移动端语音输入需要 HTTPS 安全连接。
+      </span>
+      <span v-else>
+        ⚠️ 无法获取麦克风，请检查权限设置。
+      </span>
+    </div>
+
     <div v-if="store.voiceState === 'listening'" class="wave-bars">
       <div class="wb on" v-for="i in 7" :key="i"></div>
     </div>
@@ -64,7 +73,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { store, clearChatHistory } from '../services/store'
 import { sendVoiceInput, startBackendRecording, stopBackendRecording } from '../services/socket'
 import Suggestions from './Suggestions.vue'
@@ -72,12 +81,19 @@ import Suggestions from './Suggestions.vue'
 const chatContainer = ref(null)
 const chatMessages = ref(null)
 
-watch(() => store.alog.length, async () => {
+onMounted(async () => {
   await nextTick()
   if (chatMessages.value) {
     chatMessages.value.scrollTop = chatMessages.value.scrollHeight
   }
 })
+
+watch(() => store.alog, async () => {
+  await nextTick()
+  if (chatMessages.value) {
+    chatMessages.value.scrollTop = chatMessages.value.scrollHeight
+  }
+}, { deep: true })
 
 const startRecord = () => {
   if (store.voiceState === 'idle' || store.voiceState === 'done' || store.voiceState === 'awaiting') {
@@ -306,6 +322,18 @@ const handleClear = () => {
 }
 
 .sug-container { width: 100%; margin-top: 8px; }
+
+.mic-error-banner {
+  font-size: 11px;
+  color: #ff6b6b;
+  text-align: center;
+  background: rgba(255,107,107,0.1);
+  border: 1px solid rgba(255,107,107,0.2);
+  padding: 6px 10px;
+  border-radius: 6px;
+  max-width: 90%;
+  animation: fadeUp 0.2s ease;
+}
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 </style>

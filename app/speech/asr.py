@@ -12,7 +12,6 @@ from wsgiref.handlers import format_date_time
 from datetime import datetime
 from time import mktime
 import threading
-import pyaudio
 from app.core import notifier
 from app.services.agent import process_voice_intent
 from dotenv import load_dotenv
@@ -27,12 +26,14 @@ STATUS_LAST_FRAME = 2
 class ASRSession:
     """Per-session state for speech recognition, avoids global variable races."""
 
-    def __init__(self):
+    def __init__(self, sid=None):
+        self.sid = sid
         self.recognized_text = ""
-        self.recording_active = True
-        self.recording_thread = None
+        self.active = False
+        self.ws = None
+        self.status = STATUS_FIRST_FRAME
         self.lock = threading.Lock()
-        self.audio_engine = pyaudio.PyAudio()
+        self.ws_thread = None
 
         self.ws_param = _Ws_Param(
             APPID=os.environ.get("XUNFEI_APPID", ""),
@@ -48,33 +49,95 @@ class ASRSession:
         with self.lock:
             return self.recognized_text
 
-    def stop(self):
-        self.recording_active = False
-
-    def cleanup(self):
-        try:
-            self.audio_engine.terminate()
-        except Exception:
-            pass
-
-    def run(self) -> str:
+    def start(self):
+        with self.lock:
+            if self.active:
+                return
+            self.active = True
+            
         websocket.enableTrace(False)
         ws_url = self.ws_param.create_url()
-        ws = websocket.WebSocketApp(
+        self.ws = websocket.WebSocketApp(
             ws_url,
             on_message=self._on_message,
             on_error=self._on_error,
             on_close=self._on_close,
         )
-        ws.on_open = self._on_open
-        ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
+        self.ws.on_open = self._on_open
 
-        self.recording_active = False
-        if self.recording_thread is not None:
-            self.recording_thread.join()
+        # Run the WebSocket event loop in a background thread
+        self.ws_thread = threading.Thread(
+            target=self.ws.run_forever,
+            kwargs={"sslopt": {"cert_reqs": ssl.CERT_NONE}},
+            daemon=True
+        )
+        self.ws_thread.start()
 
-        self.cleanup()
-        return self.get_text()
+    def send_audio_chunk(self, chunk: bytes):
+        if not self.active or not self.ws:
+            return
+
+        try:
+            base64_audio = base64.b64encode(chunk).decode('utf-8')
+            if self.status == STATUS_FIRST_FRAME:
+                d = {
+                    "common": self.ws_param.CommonArgs,
+                    "business": self.ws_param.BusinessArgs,
+                    "data": {
+                        "status": STATUS_FIRST_FRAME,
+                        "format": "audio/L16;rate=16000",
+                        "audio": base64_audio,
+                        "encoding": "raw"
+                    }
+                }
+                self.ws.send(json.dumps(d))
+                self.status = STATUS_CONTINUE_FRAME
+            elif self.status == STATUS_CONTINUE_FRAME:
+                d = {
+                    "data": {
+                        "status": STATUS_CONTINUE_FRAME,
+                        "format": "audio/L16;rate=16000",
+                        "audio": base64_audio,
+                        "encoding": "raw"
+                    }
+                }
+                self.ws.send(json.dumps(d))
+        except Exception as e:
+            print(f"[ASRSession] Error sending audio chunk: {e}")
+            self.stop()
+
+    def stop(self):
+        with self.lock:
+            if not self.active:
+                return
+            self.active = False
+
+        try:
+            if self.ws and self.status == STATUS_CONTINUE_FRAME:
+                # Send final frame to trigger final result from Xunfei
+                d = {
+                    "data": {
+                        "status": STATUS_LAST_FRAME,
+                        "format": "audio/L16;rate=16000",
+                        "audio": "",
+                        "encoding": "raw"
+                    }
+                }
+                self.ws.send(json.dumps(d))
+        except Exception as e:
+            print(f"[ASRSession] Error sending last frame: {e}")
+
+        # Note: We do not close the websocket immediately because we want to receive
+        # the final response (which triggers status 2 in _on_message).
+        # We only close if Xunfei takes too long or fails to respond.
+        def force_close_after_delay():
+            time.sleep(2)
+            try:
+                if self.ws:
+                    self.ws.close()
+            except Exception:
+                pass
+        threading.Thread(target=force_close_after_delay, daemon=True).start()
 
     def _on_message(self, ws, message):
         try:
@@ -99,81 +162,40 @@ class ASRSession:
             if data_dict["status"] == 2:
                 full_text = self.get_text()
                 print("\n\n[语音识别完成] 完整句子: ", full_text)
-                self.stop()
+                
+                notifier.broadcast("listening_stop")
+                
                 if full_text.strip():
                     notifier.broadcast("asr_result", {"text": full_text, "final": True})
+                    # Process the intent in a separate thread
+                    threading.Thread(
+                        target=process_voice_intent,
+                        args=(full_text,),
+                        daemon=True
+                    ).start()
+                else:
+                    notifier.broadcast("session_end", {"message": "未听到声音"})
+                
+                # Close the websocket connection since we are done
+                try:
+                    ws.close()
+                except Exception:
+                    pass
 
         except Exception as e:
             print("receive msg,but parse exception:", e)
 
     def _on_error(self, ws, error):
-        self.stop()
-        print("### error:", error)
+        print("### ASR error:", error)
+        notifier.broadcast("listening_stop")
 
     def _on_close(self, ws, *args):
-        self.stop()
-        print("### closed ###")
+        print("### ASR closed ###")
+        notifier.broadcast("listening_stop")
 
     def _on_open(self, ws):
-        self.recording_active = True
-
-        def run(*args):
-            status = STATUS_FIRST_FRAME
-            CHUNK = 1280
-            FORMAT = pyaudio.paInt16
-            CHANNELS = 1
-            RATE = 16000
-
-            try:
-                stream = self.audio_engine.open(
-                    format=FORMAT, channels=CHANNELS, rate=RATE,
-                    input=True, frames_per_buffer=CHUNK
-                )
-                print("\n---- 开始录音 (按 Ctrl+C 停止) ----\n")
-                notifier.broadcast("listening_start")
-            except Exception as e:
-                print(f"打开麦克风失败: {e}")
-                ws.close()
-                return
-
-            try:
-                while self.recording_active:
-                    buf = stream.read(CHUNK, exception_on_overflow=False)
-                    if status == STATUS_FIRST_FRAME:
-                        d = {
-                            "common": self.ws_param.CommonArgs,
-                            "business": self.ws_param.BusinessArgs,
-                            "data": {"status": 0, "format": "audio/L16;rate=16000",
-                                     "audio": str(base64.b64encode(buf), 'utf-8'),
-                                     "encoding": "raw"}
-                        }
-                        ws.send(json.dumps(d))
-                        status = STATUS_CONTINUE_FRAME
-                    elif status == STATUS_CONTINUE_FRAME:
-                        d = {"data": {"status": 1, "format": "audio/L16;rate=16000",
-                                      "audio": str(base64.b64encode(buf), 'utf-8'),
-                                      "encoding": "raw"}}
-                        ws.send(json.dumps(d))
-            except Exception as e:
-                print("录音异常/结束:", e)
-            finally:
-                try:
-                    ws.send(json.dumps({"data": {"status": 2, "format": "audio/L16;rate=16000",
-                                                  "audio": "", "encoding": "raw"}}))
-                    time.sleep(1)
-                except Exception:
-                    pass
-                try:
-                    if 'stream' in locals() and stream.is_active():
-                        stream.stop_stream()
-                        stream.close()
-                    ws.close()
-                    notifier.broadcast("listening_stop")
-                except Exception:
-                    pass
-
-        self.recording_thread = threading.Thread(target=run)
-        self.recording_thread.start()
+        print("[ASRSession] Xunfei ASR WebSocket connected")
+        notifier.broadcast("listening_start")
 
 
 class _Ws_Param:
@@ -203,43 +225,3 @@ class _Ws_Param:
             "host": "ws-api.xfyun.cn"
         }
         return url + '?' + urlencode(v)
-
-
-current_session = None
-
-def start_listen_session() -> str:
-    global current_session
-    session = ASRSession()
-    current_session = session
-    text = session.run()
-    current_session = None
-    return text
-
-def stop_listen_session():
-    global current_session
-    if current_session:
-        current_session.stop()
-
-
-def run_assistant():
-    print("=====================================================")
-    print("   智能语音日历助手已启动 (L4/L5架构) [含 WebSocket 通知]")
-    print("=====================================================")
-
-    while True:
-        try:
-            text = start_listen_session()
-            if text and text.strip():
-                process_voice_intent(text)
-            print("\n[系统] 准备进入下一轮对话...\n")
-            time.sleep(1)
-        except KeyboardInterrupt:
-            print("\n[系统] 收到退出信号，服务终止。")
-            break
-        except Exception as e:
-            print(f"\n[系统] 发生异常: {e}")
-            time.sleep(2)
-
-
-if __name__ == "__main__":
-    run_assistant()

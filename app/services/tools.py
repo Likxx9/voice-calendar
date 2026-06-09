@@ -493,7 +493,6 @@ class TrainScheduleTool(Tool):
                 "duration": duration_display,
                 "duration_minutes": t["duration_minutes"],
                 "second_class_seats": seats_2,
-                "second_class_seats": seats_2,
                 "first_class_seats": seats_1,
                 "business_class_seats": seats_b,
             })
@@ -622,8 +621,13 @@ class BizDispatcherTool(Tool):
                     result = loop.run_until_complete(_run_with_ref())
                 else:
                     result = asyncio.run(_run_with_ref())
-            except RuntimeError:
-                result = asyncio.run(_run_with_ref())
+            except (RuntimeError, ImportError):
+                try:
+                    result = asyncio.run(_run_with_ref())
+                except RuntimeError:
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        result = executor.submit(lambda: asyncio.run(_run_with_ref())).result()
 
             print(f"[Tool Result] {self.name}: {result}")
             tool_result = {"status": "success", "message": result}

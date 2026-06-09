@@ -61,6 +61,7 @@ export const store = reactive({
   timeSuggestion: null,
   trainOptions: null,
   transportOptions: null,
+  micError: null,
 
   // Calendar Interactivity State
   currentDate: new Date(),
@@ -247,6 +248,23 @@ export async function fetchEvents() {
     console.log(`[Store] 从后端加载了 ${events.length} 条日程`, events)
   } catch (err) {
     console.error('[Store] 加载日程失败:', err)
+  }
+}
+
+export async function deleteEvent(eventId) {
+  try {
+    const resp = await fetch(`/api/events/${eventId}`, {
+      method: 'DELETE'
+    })
+    if (!resp.ok) {
+      const text = await resp.text()
+      throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`)
+    }
+    console.log(`[Store] 成功删除日程 ${eventId}`)
+    await fetchEvents()
+    addLog(`[System] 日程已取消`, 's')
+  } catch (err) {
+    console.error('[Store] 删除日程失败:', err)
   }
 }
 

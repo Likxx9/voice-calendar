@@ -54,9 +54,14 @@ def run_async(coro):
             import nest_asyncio
             nest_asyncio.apply()
             return loop.run_until_complete(coro)
-    except RuntimeError:
+    except (RuntimeError, ImportError):
         pass
-    return asyncio.run(coro)
+    try:
+        return asyncio.run(coro)
+    except RuntimeError:
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            return executor.submit(lambda: asyncio.run(coro)).result()
 
 
 # ── WebSocket ─────────────────────────────────────────────
@@ -72,9 +77,18 @@ def handle_connect():
     emit('server_event', {'type': 'connected', 'data': {'message': '连接成功'}})
 
 
+active_asr_sessions = {}
+
 @socketio.on('disconnect')
 def handle_disconnect():
     print('[SocketIO] 客户端已断开')
+    sid = request.sid
+    session = active_asr_sessions.pop(sid, None)
+    if session:
+        try:
+            session.stop()
+        except Exception:
+            pass
 
 
 from app.speech.tts import tts_client
@@ -95,18 +109,30 @@ def handle_voice_input(msg):
 def handle_start_recording():
     print('[SocketIO] 收到客户端发起的开始录音请求')
     tts_client.stop()
-    def record_and_process():
-        text = asr.start_listen_session()
-        if text and text.strip():
-            process_voice_intent(text)
-        else:
-            notifier.broadcast("session_end", {"message": "未听到声音"})
-    threading.Thread(target=record_and_process, daemon=True).start()
+    sid = request.sid
+    if sid in active_asr_sessions:
+        try:
+            active_asr_sessions[sid].stop()
+        except Exception:
+            pass
+    session = asr.ASRSession(sid)
+    active_asr_sessions[sid] = session
+    session.start()
+
+@socketio.on('audio_chunk')
+def handle_audio_chunk(data):
+    sid = request.sid
+    session = active_asr_sessions.get(sid)
+    if session and session.active:
+        session.send_audio_chunk(data)
 
 @socketio.on('stop_recording')
 def handle_stop_recording():
     print('[SocketIO] 收到客户端发起的停止录音请求')
-    asr.stop_listen_session()
+    sid = request.sid
+    session = active_asr_sessions.pop(sid, None)
+    if session:
+        session.stop()
 
 
 # ── Auth API ──────────────────────────────────────────────
@@ -360,6 +386,35 @@ def api_events():
         })
 
     return jsonify(result)
+
+
+@app.route('/api/events/<event_id>', methods=['DELETE', 'OPTIONS'])
+def api_delete_event(event_id):
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    from app.database import AsyncSessionLocal
+    from app.services.schedule_service import ScheduleService
+
+    user_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+    try:
+        async def _delete():
+            async with AsyncSessionLocal() as db:
+                svc = ScheduleService(db)
+                ok = await svc.delete_event(user_id, uuid.UUID(event_id))
+                if ok:
+                    await db.commit()
+                return ok
+        ok = run_async(_delete())
+    except Exception as e:
+        print(f"[API] 删除日程异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    if not ok:
+        return jsonify({"error": "日程不存在或删除失败"}), 404
+
+    return jsonify({"status": "success", "message": "日程已成功取消"})
 
 
 # ── Static Files ──────────────────────────────────────────

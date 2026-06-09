@@ -6,6 +6,15 @@
     </div>
 
     <div class="voice-center">
+      <div v-if="store.micError" class="mic-error-banner">
+        <span v-if="store.micError === 'secure_context_required'">
+          ⚠️ 移动端语音输入需要 HTTPS 安全连接。
+        </span>
+        <span v-else>
+          ⚠️ 无法获取麦克风，请检查权限设置。
+        </span>
+      </div>
+
       <div
         class="voice-mic-main"
         :class="{
@@ -345,5 +354,18 @@ const handleChipClick = (text) => {
   color: var(--gold);
   background: var(--gold-dim);
   transform: scale(0.97);
+}
+
+.mic-error-banner {
+  font-size: 11px;
+  color: #ff6b6b;
+  text-align: center;
+  background: rgba(255,107,107,0.1);
+  border: 1px solid rgba(255,107,107,0.2);
+  padding: 8px 14px;
+  border-radius: 8px;
+  max-width: 90%;
+  margin-bottom: 10px;
+  animation: fadeUp 0.2s ease;
 }
 </style>

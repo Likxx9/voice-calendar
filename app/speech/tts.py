@@ -11,7 +11,6 @@ from wsgiref.handlers import format_date_time
 from datetime import datetime
 from time import mktime
 import _thread as thread
-import pyaudio
 import time
 from dotenv import load_dotenv
 
@@ -65,8 +64,9 @@ class XunfeiTTS:
         self._cancel_flag = False
         print(f"\n[TTS 开始播报] {text}")
 
-        p = pyaudio.PyAudio()
-        stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, output=True)
+        # Broadcast that TTS has started
+        from app.core import notifier
+        notifier.broadcast("tts_start", {"text": text})
 
         def on_message(ws, message):
             if self._cancel_flag:
@@ -79,16 +79,19 @@ class XunfeiTTS:
                     print(f"TTS 错误: {msg['message']}")
                     return
                 audio = msg["data"]["audio"]
-                audio_bytes = base64.b64decode(audio)
-                stream.write(audio_bytes)
+                
+                # Broadcast audio chunk (base64 string) to the frontend
+                notifier.broadcast("tts_chunk", {"audio": audio})
 
                 if msg["data"]["status"] == 2:
                     ws.close()
+                    notifier.broadcast("tts_end")
             except Exception as e:
                 print("TTS 异常:", e)
 
         def on_error(ws, error):
             print("TTS error:", error)
+            notifier.broadcast("tts_end")
 
         def on_close(ws, *args):
             pass
@@ -111,22 +114,9 @@ class XunfeiTTS:
 
         time.sleep(0.5)
 
-        try:
-            stream.stop_stream()
-            stream.close()
-        except Exception:
-            pass
-        try:
-            p.terminate()
-        except Exception:
-            pass
-
 
 tts_client = XunfeiTTS(
     appid=os.environ.get("XUNFEI_APPID", ""),
     api_key=os.environ.get("XUNFEI_API_KEY", ""),
     api_secret=os.environ.get("XUNFEI_API_SECRET", ""),
 )
-
-if __name__ == "__main__":
-    tts_client.synthesize_and_play("您好，我是您的智能语音助手。路线已为您规划完毕。")

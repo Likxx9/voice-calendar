@@ -61,7 +61,7 @@
       </div>
       
       <div :class="store.isMobile ? 'sheet-actions' : 'm-foot'">
-        <button :class="store.isMobile ? 'sheet-btn sheet-btn-danger' : 'btn-outline'">取消日程</button>
+        <button :class="store.isMobile ? 'sheet-btn sheet-btn-danger' : 'btn-outline'" @click="handleCancel">取消日程</button>
         <button :class="store.isMobile ? 'sheet-btn sheet-btn-primary' : 'btn-primary'">进入会议</button>
       </div>
     </div>
@@ -70,7 +70,14 @@
 
 <script setup>
 import { ref } from 'vue'
-import { store, closeModal } from '../services/store'
+import { store, closeModal, deleteEvent } from '../services/store'
+
+const handleCancel = async () => {
+  if (store.selectedEvent) {
+    await deleteEvent(store.selectedEvent.id)
+    closeModal()
+  }
+}
 
 const fmtTime = (h) => {
   const hh = Math.floor(h)

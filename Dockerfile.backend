@@ -1,0 +1,23 @@
+FROM python:3.10-slim
+
+# 使用阿里云 Debian 软件源镜像加速 apt install
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources || sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
+
+# 安装系统音频录制依赖与编译工具
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3-all-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+COPY backend_requirements.txt .
+# 使用清华大学 PyPI 镜像源加速 pip install
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir -r backend_requirements.txt
+RUN pip install gunicorn eventlet
+
+COPY . .
+
+# 生产环境使用 Gunicorn 配合 gthread 线程模式运行 Flask-SocketIO（匹配 server.py 中的 async_mode='threading'）
+CMD ["gunicorn", "--workers", "1", "--threads", "100", "--worker-class", "gthread", "--bind", "0.0.0.0:5000", "server:app"]
