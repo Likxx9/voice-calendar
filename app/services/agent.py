@@ -108,6 +108,24 @@ def process_voice_intent(user_input: str):
     print(f"\n========== Agent (L4/L5架构) 启动 ==========")
     print(f"收到语音识别结果: {user_input}")
 
+    # 关键词过滤，无日程/出行相关关键词则不调用 LLM (Agent)
+    KEYWORDS = [
+        "日程", "会议", "安排", "行程", "时间", "日期", "忙", "空闲", "空", "空挡", "规划", "路线", 
+        "路况", "怎么走", "去", "高铁", "火车", "动车", "车次", "列车", "票", "驾车", "开车", "自驾", 
+        "公交", "地铁", "步行", "走路", "骑行", "单车", "漫展", "动漫展", "展会", "活动", "新建", "创建", 
+        "添加", "加入", "删除", "取消", "去掉", "撤销", "修改", "改到", "更改", "查询", "查看", "显示", 
+        "看看", "日程表"
+    ]
+    user_input_clean = user_input.strip()
+    if not user_input_clean or not any(kw in user_input_clean for kw in KEYWORDS):
+        print("[Agent] 未检测到日程或出行相关关键词，直接停止调用 Agent 并提示无法操作")
+        tts_text = "未检测到日程或出行相关指令，无法操作。"
+        notifier.broadcast("agent_thinking", {"message": "未检测到有效指令"})
+        notifier.broadcast("tts_text", {"text": tts_text})
+        tts_client.synthesize_and_play(tts_text)
+        notifier.broadcast("session_end", {"message": "未识别到有效指令，本轮对话结束"})
+        return tts_text
+
     messages = [{"role": "system", "content": get_system_prompt()}]
 
     if chat_memory:
