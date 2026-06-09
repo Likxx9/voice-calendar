@@ -97,7 +97,12 @@ def get_system_prompt():
 
 16. 用户指定了出行时间时：
    当用户说"明天上午坐高铁去上海"：
-   - date 传明天日期，查询车次后推送给用户选择。"""
+   - date 传明天日期，查询车次后推送给用户选择。
+17. 高铁/出行日程时间变更与改签：当用户要求修改、变更已定高铁/出行日程的时间，或选择改签另一趟高铁时：
+   - 必须通过组合调用来替换日程：
+     1) 调用 schedule_management 且将 intent 设为 CANCEL_SCHEDULE，在 slots 中传入原有日程的关键词（如“高铁”或“出行”）和它的日期，删除原有的失效高铁行程。
+     2) 调用 schedule_management 且将 intent 设为 CREATE_SCHEDULE，创建新的高铁出行行程。
+   - 这样可以避免在日历中留下旧行程导致冲突和数据重复。"""
 
 chat_memory = []
 MAX_HISTORY_ROUNDS = 6  # 只保留最近3轮对话
